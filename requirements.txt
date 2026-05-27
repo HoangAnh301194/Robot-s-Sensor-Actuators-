@@ -1,0 +1,16 @@
+# ROS 2 Humble (assumed pre-installed)
+# Additional Python dependencies
+
+# Computer Vision
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Object Detection
+ultralytics>=8.0.0  # YOLOv8
+
+# OAK-D Integration
+depthai>=2.20.0
+
+# Utilities
+pyyaml>=6.0
+scipy>=1.10.0
