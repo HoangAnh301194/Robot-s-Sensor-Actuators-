@@ -597,7 +597,49 @@ Logic ứng dụng lõi cần được giữ nguyên.
 
 ---
 
-## 12. Quy trình setup cơ bản
+## 12. Cài đặt Python Virtual Environment
+
+### Lý do cần virtual environment
+
+**Lý do:**
+- **Tách biệt dependencies**: Dự án này dùng nhiều thư viện Python (OpenCV, YOLOv8, DepthAI, NumPy). Virtual environment giúp cách ly các thư viện này khỏi hệ thống toàn cục, tránh conflict version.
+- **Ổn định phiên bản**: Lock version Python 3.10 để đảm bảo tất cả thành viên trong nhóm chạy cùng môi trường.
+- **Dễ dàng deploy**: Khi triển khai lên TurtleBot 4 Lite, virtual environment giúp quá trình cài đặt lặp lại được một cách nhất quán.
+- **Tránh lỗi permission**: Không cần `sudo` để cài package vào venv cá nhân.
+
+### Bước 0 — Cài đặt Python 3.10 Virtual Environment (Ubuntu)
+
+**Yêu cầu:** Ubuntu 20.04 LTS hoặc mới hơn, Python 3.10 đã được cài đặt.
+
+```bash
+# 1. Kiểm tra Python 3.10 đã cài chưa
+python3.10 --version
+
+# 2. Cài python3.10-venv nếu chưa cài
+sudo apt-get update
+sudo apt-get install -y python3.10-venv python3.10-dev
+
+# 3. Tạo virtual environment cho dự án
+python3.10 -m venv ~/tb4_project_venv
+
+# 4. Kích hoạt virtual environment
+source ~/tb4_project_venv/bin/activate
+
+# 5. Upgrade pip, setuptools, wheel
+pip install --upgrade pip setuptools wheel
+
+# 6. Cài dependencies từ requirements.txt
+pip install -r requirements.txt
+```
+
+**Lưu ý:**
+- Mỗi lần mở terminal mới để làm việc, cần chạy: `source ~/tb4_project_venv/bin/activate`
+- Khi kích hoạt venv, prompt sẽ hiển thị `(tb4_project_venv)` ở đầu dòng
+- Để thoát venv: `deactivate`
+
+---
+
+## 13. Quy trình setup cơ bản
 
 ### Bước 1 — Tạo ROS 2 workspace
 
@@ -638,6 +680,7 @@ source install/setup.bash
 Mỗi terminal nên source ROS 2 và workspace:
 
 ```bash
+source ~/tb4_project_venv/bin/activate
 source /opt/ros/humble/setup.bash
 source ~/tb4_project_ws/install/setup.bash
 export ROS_DOMAIN_ID=17
@@ -654,6 +697,9 @@ Nội dung gợi ý cho `scripts/setup_tb4_env.sh`:
 ```bash
 #!/bin/bash
 
+# Activate Python virtual environment
+source ~/tb4_project_venv/bin/activate
+
 source /opt/ros/humble/setup.bash
 
 export ROS_DOMAIN_ID=17
@@ -663,6 +709,7 @@ if [ -f ~/tb4_project_ws/install/setup.bash ]; then
     source ~/tb4_project_ws/install/setup.bash
 fi
 
+echo "Python venv: $(which python)"
 echo "ROS_DISTRO=$ROS_DISTRO"
 echo "ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
 echo "RMW_IMPLEMENTATION=$RMW_IMPLEMENTATION"
@@ -675,6 +722,7 @@ echo "RMW_IMPLEMENTATION=$RMW_IMPLEMENTATION"
 Terminal 1 — Chạy TurtleBot 4 Lite simulation:
 
 ```bash
+source ~/tb4_project_venv/bin/activate
 source /opt/ros/humble/setup.bash
 export ROS_DOMAIN_ID=17
 ros2 launch turtlebot4_ignition_bringup turtlebot4_ignition.launch.py model:=lite
@@ -717,6 +765,7 @@ Trước khi chạy project trên robot thật, cần đảm bảo:
 Kiểm tra kết nối với robot:
 
 ```bash
+source ~/tb4_project_venv/bin/activate
 source /opt/ros/humble/setup.bash
 export ROS_DOMAIN_ID=17
 ros2 topic list
@@ -726,6 +775,7 @@ Chạy các node ứng dụng của project:
 
 ```bash
 cd ~/tb4_project_ws
+source ~/tb4_project_venv/bin/activate
 source install/setup.bash
 export ROS_DOMAIN_ID=17
 ros2 launch tb4_bringup real_robot_demo.launch.py
@@ -733,7 +783,7 @@ ros2 launch tb4_bringup real_robot_demo.launch.py
 
 ---
 
-## 16. Mission State Machine
+## 17. Mission State Machine
 
 Mission manager nên tuân theo state machine sau:
 
