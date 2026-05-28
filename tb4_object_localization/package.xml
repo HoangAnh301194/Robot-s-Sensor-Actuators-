@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>tb4_object_localization</name>
+  <version>0.0.1</version>
+  <description>3D object localization module for TurtleBot4 using detection, depth image, camera info, and TF2.</description>
+
+  <maintainer email="nghoanganh220805@gmail.com">Anh Nguyen Hoang</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>vision_msgs</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
