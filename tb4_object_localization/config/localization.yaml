@@ -1,0 +1,16 @@
+object_localization:
+  ros__parameters:
+    detection_topic: "/detected_objects_2d"
+    depth_topic: "/depth/image"
+    camera_info_topic: "/camera_info"
+
+    target_pose_camera_topic: "/target_object_pose_camera"
+    target_pose_map_topic: "/target_object_pose_map"
+    marker_topic: "/object_marker"
+
+    camera_frame: "camera_depth_optical_frame"
+    target_frame: "map"
+
+    min_depth: 0.2
+    max_depth: 5.0
+    confidence_threshold: 0.5
