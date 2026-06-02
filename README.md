@@ -82,7 +82,7 @@ Dự án xây dựng hệ thống điều hướng robot di động dựa trên 
 
 - **OS:** Ubuntu 22.04
 - **ROS 2:** Humble Hawksbill
-- **Phần mềm bổ sung:** Gazebo, Nav2, OpenCV, cv_bridge, tf2_ros
+- **Phần mềm bổ sung:** Gazebo, Nav2, SLAM Toolbox, OpenCV, cv_bridge, tf2_ros
 
 ### Clone & Build
 
@@ -100,18 +100,53 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-### Chạy mô phỏng
+### Quy trình vận hành (Workflow)
 
-```bash
-# Launch toàn bộ hệ thống
-ros2 launch tb4_bringup sim_demo.launch.py
+Hệ thống hoạt động qua **2 giai đoạn chính**:
 
-# Hoặc chạy từng module riêng lẻ
-ros2 launch tb4_vision_oak oak_detection.launch.py
-ros2 launch tb4_object_localization localization.launch.py
-ros2 launch tb4_nav_patrol nav_patrol.launch.py
-ros2 launch tb4_mission_manager mission_manager.launch.py
-```
+#### 🔹 Giai đoạn 1: Tạo bản đồ (SLAM Mapping)
+
+> **Mục đích:** Robot tự di chuyển và quét môi trường để tạo file bản đồ (.yaml + .pgm)
+
+1. **Khởi động Gazebo + SLAM:**
+   ```bash
+   ros2 launch tb4_bringup slam_demo.launch.py
+   ```
+
+2. **Di chuyển robot để quét bản đồ:**
+   - **Cách 1:** Dùng nút `2D Goal Pose` trong RViz2 để robot tự di chuyển
+   - **Cách 2:** Dùng lệnh Teleop (điều khiển thủ công):
+     ```bash
+     ros2 run teleop_twist_keyboard teleop_twist_keyboard
+     ```
+
+3. **Lưu bản đồ khi đã quét xong:**
+   ```bash
+   # Tạo thư mục maps (nếu chưa có)
+   mkdir -p ~/tb4_project_ab/src/Robots_Sensor_Actuators/tb4_bringup/maps
+
+   # Lưu bản đồ
+   ros2 run nav2_map_server map_saver_cli \
+     -f ~/tb4_project_ab/src/Robots_Sensor_Actuators/tb4_bringup/maps/office
+   ```
+   → Sẽ tạo ra 2 file: `office.yaml` và `office.pgm`
+
+#### 🔹 Giai đoạn 2: Điều hướng & Nhận diện (Navigation & Detection)
+
+> **Mục đích:** Robot sử dụng bản đồ đã tạo để tuần tra, nhận diện vật thể và tiếp cận mục tiêu
+
+1. **Chạy toàn bộ hệ thống:**
+   ```bash
+   ros2 launch tb4_bringup sim_demo.launch.py
+   ```
+
+2. **Hoặc chạy từng module riêng lẻ:**
+   ```bash
+   ros2 launch tb4_vision_oak oak_detection.launch.py
+   ros2 launch tb4_object_localization localization.launch.py
+   ros2 launch tb4_nav_patrol nav_patrol.launch.py
+   ros2 launch tb4_mission_manager mission_manager.launch.py
+   ```
 
 ### Chạy trên robot thật
 
@@ -134,7 +169,6 @@ Robots_Sensor_Actuators/
 │   ├── launch/oak_detection.launch.py
 │   ├── models/                        # MobileNet-SSD (.prototxt, .caffemodel, .blob)
 │   ├── scripts/detection_node.py      # Node nhận diện vật thể
-│   ├── package.xml
 │   └── setup.py
 ├── tb4_object_localization/           # Module định vị 3D
 │   ├── launch/localization.launch.py
@@ -150,8 +184,12 @@ Robots_Sensor_Actuators/
 │   ├── scripts/mission_manager_node.py # Logic sinh safe goal
 │   └── README.md
 └── tb4_bringup/                       # Launch tổng hợp
-    ├── launch/sim_demo.launch.py      # Launch mô phỏng (Nav2 + RViz2)
-    └── launch/real_robot_demo.launch.py
+    ├── launch/
+    │   ├── slam_demo.launch.py        # Launch SLAM mapping
+    │   ├── sim_demo.launch.py         # Launch Navigation mô phỏng
+    │   └── real_robot_demo.launch.py  # Launch robot thật
+    ├── maps/                          # Thư mục chứa bản đồ (.yaml + .pgm)
+    └── README.md
 ```
 
 ---
@@ -166,6 +204,7 @@ Robots_Sensor_Actuators/
 | `/vision/detected_objects` | tb4_vision_oak | tb4_mission_manager | vision_msgs/Detection2DArray |
 | `/target_object_pose_map` | tb4_object_localization | tb4_mission_manager | geometry_msgs/PoseStamped |
 | `/goal_pose` | tb4_mission_manager | Nav2 | geometry_msgs/PoseStamped |
+| `/navigate_to_pose` | Nav2 | tb4_nav_patrol | nav2_msgs/NavigateToPose |
 
 ### Cấu trúc TF
 
@@ -187,6 +226,7 @@ map
 
 - [ROS 2 Humble Documentation](https://docs.ros.org/en/humble/)
 - [Nav2 Documentation](https://docs.nav2.org/)
+- [SLAM Toolbox](https://github.com/SteveMacenski/slam_toolbox)
 - [TurtleBot 4 User Manual](https://turtlebot.github.io/turtlebot4-user-manual/)
 - [OpenCV DNN Module](https://docs.opencv.org/4.x/d2/d58/tutorial_table_of_content_dnn.html)
 - [Luxonis OAK-D](https://docs.luxonis.com/)
