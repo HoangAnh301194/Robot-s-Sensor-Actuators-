@@ -1,60 +1,44 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 import os
-
 import cv2
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-
+from ament_index_python.packages import get_package_share_directory
 
 class SimDetectionNode(Node):
     def __init__(self):
         super().__init__("oakd_detection_node")
         self.bridge = CvBridge()
 
-        # Đường dẫn tuyệt đối chính xác dựa trên lệnh 'find' của bạn
-        base_path = "/home/nhatnguyen/tb4_project_ab/src/Robot-s-Sensor-Actuators-/tb4_vision_oak/models"
-        prototxt = os.path.join(base_path, "MobileNetSSD_deploy.prototxt")
-        caffemodel = os.path.join(base_path, "MobileNetSSD_deploy.caffemodel")
+        # Lấy đường dẫn đến thư mục models trong package
+        package_share_directory = get_package_share_directory('tb4_vision_oak')
+        models_path = os.path.join(package_share_directory, 'models')
+        
+        prototxt = os.path.join(models_path, "MobileNetSSD_deploy.prototxt")
+        caffemodel = os.path.join(models_path, "MobileNetSSD_deploy.caffemodel")
 
         # Kiểm tra sự tồn tại của file trước khi nạp
         if not os.path.exists(prototxt) or not os.path.exists(caffemodel):
-            self.get_logger().error(f"Lỗi: Không tìm thấy file tại {base_path}")
+            self.get_logger().error(f"Lỗi: Không tìm thấy file model tại {models_path}")
             return
 
         # Nạp mô hình AI
         self.net = cv2.dnn.readNetFromCaffe(prototxt, caffemodel)
         self.CLASSES = [
-            "background",
-            "aeroplane",
-            "bicycle",
-            "bird",
-            "boat",
-            "bottle",
-            "bus",
-            "car",
-            "cat",
-            "chair",
-            "cow",
-            "diningtable",
-            "dog",
-            "horse",
-            "motorbike",
-            "person",
-            "pottedplant",
-            "sheep",
-            "sofa",
-            "train",
-            "tvmonitor",
+            "background", "aeroplane", "bicycle", "bird", "boat",
+            "bottle", "bus", "car", "cat", "chair", "cow",
+            "diningtable", "dog", "horse", "motorbike", "person",
+            "pottedplant", "sheep", "sofa", "train", "tvmonitor",
         ]
 
-        # Subscribe tới topic ảnh của robot
+        # Subscribe đến topic ảnh của robot
         self.subscription = self.create_subscription(
             Image, "/oakd/rgb/preview/image_raw", self.image_callback, 10
         )
-        self.get_logger().info("Node AI đã khởi động thành công!")
+        self.get_logger().info("Node AI nhận diện đã khởi động thành công!")
 
     def image_callback(self, msg):
         try:
@@ -81,13 +65,8 @@ class SimDetectionNode(Node):
                     )
                     label = f"{self.CLASSES[idx]}: {confidence * 100:.2f}%"
                     cv2.putText(
-                        cv_image,
-                        label,
-                        (startX, startY - 15),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (0, 255, 0),
-                        2,
+                        cv_image, label, (startX, startY - 15),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2,
                     )
 
             cv2.imshow("TurtleBot 4 AI Detection", cv_image)
@@ -95,14 +74,12 @@ class SimDetectionNode(Node):
         except Exception as e:
             self.get_logger().error(f"Lỗi callback: {e}")
 
-
 def main(args=None):
     rclpy.init(args=args)
     node = SimDetectionNode()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
-
 
 if __name__ == "__main__":
     main()

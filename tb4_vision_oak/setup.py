@@ -12,9 +12,11 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
-        # Copy toÃ n bá»™ file launch vÃ o thÆ° má»¥c cÃ i Ä'áº·t
+        # Copy toàn bộ file launch vào thư mục cài đặt
         (os.path.join("share", package_name, "launch"), glob("launch/*.py")),
-        # CHá»– Sá»¬A Lá»–I: Copy file script vÃ o thÆ° má»¥c lib Ä'Æ°á»£c ROS 2 cÃ³ thá»ƒ cháº¡y Ä'Æ°á»£c
+        # Copy thư mục models vào thư mục cài đặt
+        (os.path.join("share", package_name, "models"), glob("models/*")),
+        # Copy file script vào thư mục lib để ROS 2 có thể chạy được
         (os.path.join("lib", package_name), glob("scripts/*.py")),
     ],
     install_requires=["setuptools"],
