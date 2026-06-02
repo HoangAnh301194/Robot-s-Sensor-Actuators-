@@ -23,7 +23,7 @@ class MissionManagerNode(Node):
             
         self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         
-        self.safe_distance = 0.5
+        self.safe_distance = 1.5
         self.get_logger().info("Mission Manager đã sẵn sàng!")
 
     def object_callback(self, msg):
