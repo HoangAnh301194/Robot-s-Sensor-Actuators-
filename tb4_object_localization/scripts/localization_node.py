@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-import rclpy
-from rclpy.node import Node
-from sensor_msgs.msg import Image, CameraInfo
-from cv_bridge import CvBridge
-import tf2_ros
-from geometry_msgs.msg import TransformStamped
 import numpy as np
+import rclpy
+import tf2_ros
+from cv_bridge import CvBridge
+from geometry_msgs.msg import TransformStamped
+from rclpy.node import Node
+from sensor_msgs.msg import CameraInfo, Image
 
 
 class ObjectLocalizationNode(Node):
