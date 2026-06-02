@@ -1,0 +1,5 @@
+oakd_detection_node:
+  ros__parameters:
+    confidence_threshold: 0.5
+    camera_fps: 30
+    model_path: "models/mobilenet-ssd.blob"
