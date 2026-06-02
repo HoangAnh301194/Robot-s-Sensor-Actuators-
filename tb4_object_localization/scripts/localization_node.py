@@ -7,22 +7,27 @@ import tf2_ros
 from geometry_msgs.msg import TransformStamped
 import numpy as np
 
+
 class ObjectLocalizationNode(Node):
     def __init__(self):
-        super().__init__('object_localization_node')
+        super().__init__("object_localization_node")
         self.bridge = CvBridge()
-        
+
         # Biến lưu thông số camera (Intrinsics)
         self.fx = self.fy = self.cx = self.cy = None
-        
+
         # TF Broadcaster để phát tọa độ lên RViz
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
 
         # Đăng ký nhận thông số Camera
-        self.create_subscription(CameraInfo, '/oakd/rgb/preview/camera_info', self.camera_info_callback, 10)
+        self.create_subscription(
+            CameraInfo, "/oakd/rgb/preview/camera_info", self.camera_info_callback, 10
+        )
         # Đăng ký nhận ảnh Chiều sâu (Depth)
-        self.create_subscription(Image, '/oakd/rgb/preview/depth', self.depth_callback, 10)
-        
+        self.create_subscription(
+            Image, "/oakd/rgb/preview/depth", self.depth_callback, 10
+        )
+
         self.get_logger().info("Đã khởi động Node 3D Object Localization!")
 
     def camera_info_callback(self, msg):
@@ -35,11 +40,11 @@ class ObjectLocalizationNode(Node):
 
     def depth_callback(self, msg):
         if self.fx is None:
-            return # Đợi có thông số camera trước
+            return  # Đợi có thông số camera trước
 
         try:
             # Chuyển ROS Image thành mảng OpenCV
-            depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+            depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
             height, width = depth_image.shape
 
             # GIẢ LẬP: Coi vật thể nằm ở chính giữa khung hình
@@ -47,8 +52,8 @@ class ObjectLocalizationNode(Node):
             v = int(height / 2)
 
             # Lấy giá trị khoảng cách Z (tại pixel u, v)
-            Z = depth_image[v, u] 
-            
+            Z = depth_image[v, u]
+
             # Bỏ qua nếu điểm đó bị lỗi đo lường (Z = 0 hoặc NaN)
             if Z <= 0 or np.isnan(Z):
                 return
@@ -70,10 +75,12 @@ class ObjectLocalizationNode(Node):
     def publish_tf(self, x, y, z, stamp):
         t = TransformStamped()
         t.header.stamp = stamp
-        t.header.frame_id = 'oakd_link' # Gắn với hệ tọa độ của camera
-        t.child_frame_id = 'detected_object_3d' # Tên của vật thể
-        
-        t.transform.translation.x = float(z)   # Chú ý: Trục X của ROS thường hướng tới trước
+        t.header.frame_id = "oakd_link"  # Gắn với hệ tọa độ của camera
+        t.child_frame_id = "detected_object_3d"  # Tên của vật thể
+
+        t.transform.translation.x = float(
+            z
+        )  # Chú ý: Trục X của ROS thường hướng tới trước
         t.transform.translation.y = float(-x)  # Trục Y hướng sang trái
         t.transform.translation.z = float(-y)  # Trục Z hướng lên trên
 
@@ -85,6 +92,7 @@ class ObjectLocalizationNode(Node):
 
         self.tf_broadcaster.sendTransform(t)
 
+
 def main(args=None):
     rclpy.init(args=args)
     node = ObjectLocalizationNode()
@@ -92,5 +100,6 @@ def main(args=None):
     node.destroy_node()
     rclpy.shutdown()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

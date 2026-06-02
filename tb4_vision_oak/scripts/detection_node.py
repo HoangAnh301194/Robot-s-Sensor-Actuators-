@@ -7,6 +7,7 @@ from cv_bridge import CvBridge
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 
+
 class SimDetectionNode(Node):
     def __init__(self):
         super().__init__("oakd_detection_node")
@@ -24,10 +25,29 @@ class SimDetectionNode(Node):
 
         # Nạp mô hình AI
         self.net = cv2.dnn.readNetFromCaffe(prototxt, caffemodel)
-        self.CLASSES = ["background", "aeroplane", "bicycle", "bird", "boat",
-                        "bottle", "bus", "car", "cat", "chair", "cow", "diningtable",
-                        "dog", "horse", "motorbike", "person", "pottedplant", "sheep",
-                        "sofa", "train", "tvmonitor"]
+        self.CLASSES = [
+            "background",
+            "aeroplane",
+            "bicycle",
+            "bird",
+            "boat",
+            "bottle",
+            "bus",
+            "car",
+            "cat",
+            "chair",
+            "cow",
+            "diningtable",
+            "dog",
+            "horse",
+            "motorbike",
+            "person",
+            "pottedplant",
+            "sheep",
+            "sofa",
+            "train",
+            "tvmonitor",
+        ]
 
         # Subscribe tới topic ảnh của robot
         self.subscription = self.create_subscription(
@@ -38,10 +58,12 @@ class SimDetectionNode(Node):
     def image_callback(self, msg):
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-            (h, w) = cv_image.shape[:2]
+            h, w = cv_image.shape[:2]
 
             # Xử lý nhận diện
-            blob = cv2.dnn.blobFromImage(cv2.resize(cv_image, (300, 300)), 0.007843, (300, 300), 127.5)
+            blob = cv2.dnn.blobFromImage(
+                cv2.resize(cv_image, (300, 300)), 0.007843, (300, 300), 127.5
+            )
             self.net.setInput(blob)
             detections = self.net.forward()
 
@@ -50,17 +72,28 @@ class SimDetectionNode(Node):
                 if confidence > 0.5:
                     idx = int(detections[0, 0, i, 1])
                     box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-                    (startX, startY, endX, endY) = box.astype("int")
-                    
+                    startX, startY, endX, endY = box.astype("int")
+
                     # Vẽ khung hình
-                    cv2.rectangle(cv_image, (startX, startY), (endX, endY), (0, 255, 0), 2)
+                    cv2.rectangle(
+                        cv_image, (startX, startY), (endX, endY), (0, 255, 0), 2
+                    )
                     label = f"{self.CLASSES[idx]}: {confidence * 100:.2f}%"
-                    cv2.putText(cv_image, label, (startX, startY - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    cv2.putText(
+                        cv_image,
+                        label,
+                        (startX, startY - 15),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 255, 0),
+                        2,
+                    )
 
             cv2.imshow("TurtleBot 4 AI Detection", cv_image)
             cv2.waitKey(1)
         except Exception as e:
             self.get_logger().error(f"Lỗi callback: {e}")
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -69,5 +102,6 @@ def main(args=None):
     node.destroy_node()
     rclpy.shutdown()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
