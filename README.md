@@ -1,52 +1,209 @@
-# 📦 tb4_object_localization (3D Object Localization)
+﻿# 🤖 Edge-Optimized Vision-Guided Navigation for TurtleBot 4 Lite
 
-## 📖 1. Tổng quan (Overview)
-`tb4_object_localization` là một package ROS 2 (Humble) được viết bằng Python (tích hợp trong nền tảng hệ thống xây dựng `ament_cmake`). Gói này đóng vai trò là module định vị không gian 3D thuộc chuỗi xử lý tự hành của robot TurtleBot 4.
+> Điều hướng robot di động dựa trên thị giác với mô hình AI tối ưu hóa cho thiết bị biên trên TurtleBot 4 Lite
 
-Module này tiếp nhận thông tin ma trận chiều sâu (Depth Map) và thông số kỹ thuật (Intrinsics) từ camera OAK-D mô phỏng, kết hợp với tọa độ pixel vùng nhận diện (2D Bounding Box) từ module thị giác (`tb4_vision_oak`) để tính toán chính xác khoảng cách và tọa độ vật lý $X, Y, Z$ của mục tiêu theo mô hình camera lỗ kim (Pinhole Camera Model). Sau đó, vị trí này được phát tán (broadcast) lên hệ thống dưới dạng một phối cảnh tọa độ động (TF Dynamic Transform) để hiển thị trực quan trên RViz2.
+## 📖 1. Tổng quan dự án
 
----
+Dự án xây dựng hệ thống điều hướng robot di động dựa trên thị giác cho **TurtleBot 4 Lite**. Robot tuần tra trong bản đồ đã biết bằng **ROS 2 Navigation2 (Nav2)**, sử dụng camera **OAK-D-Lite RGB-D** để phát hiện vật thể mục tiêu bằng mô hình object detection nhẹ. Khi phát hiện vật thể, hệ thống ước lượng vị trí 3D, chuyển sang tọa độ bản đồ, sinh goal an toàn và gửi cho Nav2 để tiếp cận mục tiêu.
 
-## 🏗️ 2. Kiến trúc Node (Node Architecture)
-
-### 🧩 Node: `object_localization_node`
-* **File thực thi:** `scripts/localization_node.py` (được cấu hình cài đặt thông qua `CMakeLists.txt`).
-* **Cơ chế cốt lõi:** 1. Đọc ma trận camera từ `CameraInfo` để trích xuất các tiêu cự ($f_x, f_y$) và tâm quang học ($c_x, c_y$).
-  2. Lắng nghe luồng ảnh Depth, trích xuất giá trị độ sâu $Z$ (đơn vị mm) tại tâm của đối tượng mục tiêu $(u, v)$.
-  3. Áp dụng công thức hình chiếu ngược (Pinhole Camera Model) để chuyển đổi tọa độ pixel 2D sang tọa độ không gian 3D của camera:
-     $$X_c = \frac{(u - c_x) \times Z}{f_x}$$
-     $$Y_c = \frac{(v - c_y) \times Z}{f_y}$$
-     $$Z_c = Z$$
+**Stack công nghệ:** ROS 2 Humble · Python · OpenCV DNN · MobileNet-SSD · Nav2 · Gazebo · OAK-D-Lite
 
 ---
 
-## 📡 3. Giao tiếp Topics & Khung tọa độ (ROS 2 Topics & TF)
+## 🏗️ 2. Kiến trúc hệ thống
 
-### 📥 Subscribed Topics (Dữ liệu đầu vào)
-* **`/oakd/rgb/preview/camera_info`** (`sensor_msgs/msg/CameraInfo`)
-  * **Mô tả:** Nhận các thông số nội tại (Intrinsic Parameters) của camera để lấy ma trận $K$ phục vụ tính toán hình học chiếu.
-* **`/oakd/rgb/preview/depth`** (`sensor_msgs/msg/Image`)
-  * **Mô tả:** Tiếp nhận luồng dữ liệu chiều sâu tương ứng với khung hình camera. Giá trị của mỗi pixel biểu thị khoảng cách từ camera đến bề mặt vật thể vật lý.
+```
+                    ┌──────────────────┐
+                    │  TurtleBot 4 Lite │
+                    │ (base, odometry)  │
+                    └───────┬──────────┘
+                            │
+            ┌───────────────┼───────────────┐
+            │               │               │
+       ┌────▼────┐   ┌─────▼─────┐   ┌─────▼─────┐
+       │   Nav2  │   │ OAK-D Lite│   │ Base Link │
+       │         │   │   RGB-D   │   │    TF     │
+       └────┬────┘   └─────┬─────┘   └─────┬─────┘
+            │               │               │
+            │               ▼               │
+            │        ┌──────────────┐       │
+            │        │ tb4_vision   │       │
+            │        │    _oak      │       │
+            │        │ (detection)  │       │
+            │        └──────┬───────┘       │
+            │               │               │
+            │               ▼               │
+            │        ┌───────────────┐      │
+            │        │tb4_object_loc │      │
+            │        │  alization    │      │
+            │        │ (3D pose, TF) │      │
+            │        └──────┬────────┘      │
+            │               │               │
+            │               ▼               │
+            │        ┌───────────────┐      │
+            │        │tb4_mission_   │      │
+            │        │  manager      │      │
+            │        │(goal gen)     │      │
+            │        └──────┬────────┘      │
+            │               │               │
+            └───────────────┼───────────────┘
+                            │
+                    ┌───────▼──────────┐
+                    │  tb4_bringup     │
+                    │ (orchestration)  │
+                    └──────────────────┘
+```
 
-### 📍 Cấu hình hệ tọa độ TF (Transform Broadcaster)
-Node sử dụng `tf2_ros.TransformBroadcaster` để liên tục phát tọa độ vị trí của vật thể được phát hiện vào cây tọa độ chung của hệ thống:
-* **Parent Frame (Khung gốc):** `oakd_link` (Hệ tọa độ của mắt camera gắn trên xe robot).
-* **Child Frame (Khung vật thể):** `detected_object_3d` (Hệ tọa độ động của mục tiêu).
-* **Ánh xạ hướng trục (Coordinate Mapping sang chuẩn ROS):**
-  * Trục **X** (ROS hướng tới trước): Nhận giá trị từ trục $Z_c$ (khoảng cách chiều sâu).
-  * Trục **Y** (ROS hướng sang trái): Nhận giá trị từ trục $-X_c$ (lệch ngang).
-  * Trục **Z** (ROS hướng lên trên): Nhận giá trị từ trục $-Y_c$ (độ cao vật thể).
+### Luồng dữ liệu
+
+1. **Cảm biến**: Robot cung cấp odometry, TF tree
+2. **Vision**: OAK-D camera → detection (bounding boxes)
+3. **Localization**: depth + detection → 3D object pose + TF
+4. **Mission**: object pose → safe goal → Nav2
+5. **Navigation**: Nav2 lập kế hoạch & điều khiển robot
 
 ---
 
-## 📂 4. Cấu trúc thư mục (Directory Structure)
+## 📦 3. Các Package
 
-```text
-tb4_object_localization/
-├── launch/
-│   └── localization.launch.py      # Script tự động khởi chạy node định vị
-├── scripts/
-│   └── localization_node.py        # Mã nguồn xử lý toán học toán định vị 3D và phát TF
-├── CMakeLists.txt                  # Cấu hình biên dịch và cài đặt scripts/launch theo chuẩn CMake
-├── package.xml                     # Khai báo các dependencies của hệ thống (tf2_ros, geometry_msgs,...)
-└── README.md                       # Tài liệu hướng dẫn sử dụng package
+| Package | Mô tả | Trạng thái |
+|---------|-------|------------|
+| `tb4_vision_oak` | Nhận diện vật thể bằng OAK-D + MobileNet-SSD | ✅ Hoàn thành |
+| `tb4_object_localization` | Định vị 3D vật thể từ depth + broadcast TF | ✅ Hoàn thành |
+| `tb4_nav_patrol` | Tuần tra tự động bằng Nav2 Action Client | ✅ Hoàn thành |
+| `tb4_mission_manager` | Quản lý nhiệm vụ & sinh goal tiếp cận an toàn | ✅ Hoàn thành |
+| `tb4_bringup` | Launch file tổng hợp Nav2 + RViz2 + toàn bộ modules | ✅ Hoàn thành |
+
+---
+
+## 🚀 4. Cài đặt & Sử dụng
+
+### Yêu cầu hệ thống
+
+- **OS:** Ubuntu 22.04
+- **ROS 2:** Humble Hawksbill
+- **Phần mềm bổ sung:** Gazebo, Nav2, OpenCV, cv_bridge, tf2_ros
+
+### Clone & Build
+
+```bash
+git clone https://github.com/<owner>/Robots_Sensor_Actuators.git
+cd Robots_Sensor_Actuators
+
+# Tạo workspace (nếu chưa có)
+mkdir -p ~/tb4_project_ab/src
+ln -s $(pwd) ~/tb4_project_ab/src/Robot-s-Sensor-Actuators-
+
+# Build
+cd ~/tb4_project_ab
+colcon build --symlink-install
+source install/setup.bash
+```
+
+### Chạy mô phỏng
+
+```bash
+# Launch toàn bộ hệ thống
+ros2 launch tb4_bringup sim_demo.launch.py
+
+# Hoặc chạy từng module riêng lẻ
+ros2 launch tb4_vision_oak oak_detection.launch.py
+ros2 launch tb4_object_localization localization.launch.py
+ros2 launch tb4_nav_patrol nav_patrol.launch.py
+ros2 launch tb4_mission_manager mission_manager.launch.py
+```
+
+### Chạy trên robot thật
+
+```bash
+ros2 launch tb4_bringup real_robot_demo.launch.py
+```
+
+---
+
+## 🔧 5. Cấu trúc thư mục
+
+```
+Robots_Sensor_Actuators/
+├── README.md                          # Tài liệu chính
+├── docs/
+│   └── ARCHITECTURE.md                # Kiến trúc chi tiết
+├── GitHub_turtorial.md                # Hướng dẫn Git workflow
+├── tb4_vision_oak/                    # Module nhận diện OAK-D
+│   ├── config/camera_params.yaml      # Cấu hình ngưỡng AI, FPS
+│   ├── launch/oak_detection.launch.py
+│   ├── models/                        # MobileNet-SSD (.prototxt, .caffemodel, .blob)
+│   ├── scripts/detection_node.py      # Node nhận diện vật thể
+│   ├── package.xml
+│   └── setup.py
+├── tb4_object_localization/           # Module định vị 3D
+│   ├── launch/localization.launch.py
+│   ├── scripts/localization_node.py   # Node tính tọa độ 3D & broadcast TF
+│   ├── CMakeLists.txt
+│   └── package.xml
+├── tb4_nav_patrol/                    # Module tuần tra Nav2
+│   ├── launch/nav_patrol.launch.py
+│   ├── scripts/patrol_node.py         # Nav2 Action Client, waypoint navigation
+│   └── README.md
+├── tb4_mission_manager/               # Module quản lý nhiệm vụ
+│   ├── launch/mission_manager.launch.py
+│   ├── scripts/mission_manager_node.py # Logic sinh safe goal
+│   └── README.md
+└── tb4_bringup/                       # Launch tổng hợp
+    ├── launch/sim_demo.launch.py      # Launch mô phỏng (Nav2 + RViz2)
+    └── launch/real_robot_demo.launch.py
+```
+
+---
+
+## 📡 6. ROS 2 Topics & TF
+
+| Topic | Producer | Consumer | Msg Type |
+|-------|----------|----------|----------|
+| `/oakd/rgb/preview/image_raw` | OAK-D | tb4_vision_oak | sensor_msgs/Image |
+| `/oakd/rgb/preview/depth` | OAK-D | tb4_object_localization | sensor_msgs/Image |
+| `/oakd/rgb/preview/camera_info` | OAK-D | tb4_object_localization | sensor_msgs/CameraInfo |
+| `/vision/detected_objects` | tb4_vision_oak | tb4_mission_manager | vision_msgs/Detection2DArray |
+| `/target_object_pose_map` | tb4_object_localization | tb4_mission_manager | geometry_msgs/PoseStamped |
+| `/goal_pose` | tb4_mission_manager | Nav2 | geometry_msgs/PoseStamped |
+
+### Cấu trúc TF
+
+```
+map
+ └── odom
+      └── base_footprint
+           └── base_link
+                ├── camera_link
+                │   └── camera_optical_frame
+                ├── oakd_link
+                │   └── detected_object_3d   ← (TF động từ localization node)
+                └── caster_wheel_link
+```
+
+---
+
+## 📚 7. Tài liệu tham khảo
+
+- [ROS 2 Humble Documentation](https://docs.ros.org/en/humble/)
+- [Nav2 Documentation](https://docs.nav2.org/)
+- [TurtleBot 4 User Manual](https://turtlebot.github.io/turtlebot4-user-manual/)
+- [OpenCV DNN Module](https://docs.opencv.org/4.x/d2/d58/tutorial_table_of_content_dnn.html)
+- [Luxonis OAK-D](https://docs.luxonis.com/)
+
+---
+
+## 👥 8. Thành viên & Phân công
+
+| Thành viên | Module | Branch |
+|------------|--------|--------|
+| Member 1 | Nav2 patrol & simulation | `feature/nav2-patrol` |
+| Member 2 | OAK-D detection | `feature/oakd-detection` |
+| Member 3 | Object localization | `feature/object-localization` |
+| Member 4 | Mission manager | `feature/mission-manager` |
+
+---
+
+## 📄 License
+
+Apache-2.0
