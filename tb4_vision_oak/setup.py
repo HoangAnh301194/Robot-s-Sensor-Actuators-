@@ -1,4 +1,4 @@
-import os
+﻿import os
 from glob import glob
 
 from setuptools import find_packages, setup
@@ -12,9 +12,9 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
-        # Copy toàn bộ file launch vào thư mục cài đặt
+        # Copy toÃ n bá»™ file launch vÃ o thÆ° má»¥c cÃ i Ä'áº·t
         (os.path.join("share", package_name, "launch"), glob("launch/*.py")),
-        # CHỖ SỬA LỖI: Copy file script vào thư mục lib để ROS 2 có thể chạy được
+        # CHá»– Sá»¬A Lá»–I: Copy file script vÃ o thÆ° má»¥c lib Ä'Æ°á»£c ROS 2 cÃ³ thá»ƒ cháº¡y Ä'Æ°á»£c
         (os.path.join("lib", package_name), glob("scripts/*.py")),
     ],
     install_requires=["setuptools"],
@@ -24,4 +24,9 @@ setup(
     description="OAK-D Lite Object Detection for TurtleBot 4",
     license="Apache-2.0",
     tests_require=["pytest"],
+    entry_points={
+        "console_scripts": [
+            "detection_node = scripts.detection_node:main"
+        ],
+    },
 )

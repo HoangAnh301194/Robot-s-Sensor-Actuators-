@@ -1,16 +1,15 @@
-﻿<?xml version="1.0"?>
+<?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>tb4_vision_oak</name>
+  <name>tb4_mission_manager</name>
   <version>0.0.0</version>
-  <description>OAK-D Lite Object Detection for TurtleBot 4</description>
-  <maintainer email="nhatnguyen@todo.todo">Nhat Nguyen</maintainer>
+  <description>Mission management for TurtleBot 4 Lite</description>
+  <maintainer email="hoang_anh@todo.todo">hoang_anh</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
-  <depend>sensor_msgs</depend>
-  <depend>cv_bridge</depend>
-  <depend>vision_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav2_msgs</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
