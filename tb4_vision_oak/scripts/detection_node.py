@@ -1,108 +1,72 @@
 #!/usr/bin/env python3
 import os
-
 import cv2
-import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-
+from ultralytics import YOLO
 
 class SimDetectionNode(Node):
     def __init__(self):
         super().__init__("oakd_detection_node")
         self.bridge = CvBridge()
 
-        # Đường dẫn tuyệt đối chính xác dựa trên lệnh 'find' của bạn
-        base_path = "/home/nhatnguyen/tb4_project_ab/src/Robot-s-Sensor-Actuators-/tb4_vision_oak/models"
-        prototxt = os.path.join(base_path, "MobileNetSSD_deploy.prototxt")
-        caffemodel = os.path.join(base_path, "MobileNetSSD_deploy.caffemodel")
+        # 1. Khai báo Parameter để tránh việc viết cứng đường dẫn trong code
+        # Đường dẫn mặc định vẫn trỏ tới file của bạn để chạy được ngay
+        default_path = "/home/nhatnguyen/tb4_project_ab/src/Robot-s-Sensor-Actuators-/tb4_vision_oak/models/yolov8n.pt"
+        self.declare_parameter("model_path", default_path)
+        
+        # Lấy giá trị cấu hình từ parameter
+        model_path = self.get_parameter("model_path").get_parameter_value().string_value
 
-        # Kiểm tra sự tồn tại của file trước khi nạp
-        if not os.path.exists(prototxt) or not os.path.exists(caffemodel):
-            self.get_logger().error(f"Lỗi: Không tìm thấy file tại {base_path}")
+        # 2. Kiểm tra sự tồn tại của file trước khi nạp
+        if not os.path.exists(model_path):
+            self.get_logger().error(f"Lỗi: Không tìm thấy file mô hình tại: {model_path}")
             return
 
-        # Nạp mô hình AI
-        self.net = cv2.dnn.readNetFromCaffe(prototxt, caffemodel)
-        self.CLASSES = [
-            "background",
-            "aeroplane",
-            "bicycle",
-            "bird",
-            "boat",
-            "bottle",
-            "bus",
-            "car",
-            "cat",
-            "chair",
-            "cow",
-            "diningtable",
-            "dog",
-            "horse",
-            "motorbike",
-            "person",
-            "pottedplant",
-            "sheep",
-            "sofa",
-            "train",
-            "tvmonitor",
-        ]
-
-        # Subscribe tới topic ảnh của robot
+        # 3. Nạp mô hình AI YOLOv8
+        self.get_logger().info(f"Đang nạp mô hình YOLOv8 từ: {model_path}")
+        try:
+            self.model = YOLO(model_path)
+        except Exception as e:
+            self.get_logger().error(f"Không thể khởi tạo mô hình YOLOv8: {e}")
+            return
+        
+        # 4. Subscribe tới topic ảnh của robot trong Gazebo
         self.subscription = self.create_subscription(
             Image, "/oakd/rgb/preview/image_raw", self.image_callback, 10
         )
-        self.get_logger().info("Node AI đã khởi động thành công!")
+        self.get_logger().info("Node AI YOLOv8 đã khởi động thành công!")
 
     def image_callback(self, msg):
         try:
+            # Chuyển đổi dữ liệu ảnh ROS sang format OpenCV
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-            h, w = cv_image.shape[:2]
 
-            # Xử lý nhận diện
-            blob = cv2.dnn.blobFromImage(
-                cv2.resize(cv_image, (300, 300)), 0.007843, (300, 300), 127.5
-            )
-            self.net.setInput(blob)
-            detections = self.net.forward()
+            # Xử lý nhận diện bằng YOLOv8 (verbose=False để ẩn log thừa)
+            results = self.model(cv_image, verbose=False)
 
-            for i in np.arange(0, detections.shape[2]):
-                confidence = detections[0, 0, i, 2]
-                if confidence > 0.5:
-                    idx = int(detections[0, 0, i, 1])
-                    box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-                    startX, startY, endX, endY = box.astype("int")
+            # Sử dụng hàm .plot() có sẵn để tự vẽ Bounding Box và Label lên ảnh
+            annotated_frame = results[0].plot()
 
-                    # Vẽ khung hình
-                    cv2.rectangle(
-                        cv_image, (startX, startY), (endX, endY), (0, 255, 0), 2
-                    )
-                    label = f"{self.CLASSES[idx]}: {confidence * 100:.2f}%"
-                    cv2.putText(
-                        cv_image,
-                        label,
-                        (startX, startY - 15),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (0, 255, 0),
-                        2,
-                    )
-
-            cv2.imshow("TurtleBot 4 AI Detection", cv_image)
+            # Hiển thị cửa sổ kết quả nhận diện
+            cv2.imshow("TurtleBot 4 AI Detection - YOLOv8", annotated_frame)
             cv2.waitKey(1)
+            
         except Exception as e:
-            self.get_logger().error(f"Lỗi callback: {e}")
-
+            self.get_logger().error(f"Lỗi trong vòng callback nhận diện: {e}")
 
 def main(args=None):
     rclpy.init(args=args)
     node = SimDetectionNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
-
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("Đang tắt Node nhận diện AI...")
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == "__main__":
     main()
