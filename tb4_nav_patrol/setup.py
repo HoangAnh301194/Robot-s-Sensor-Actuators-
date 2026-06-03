@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import find_packages, setup
 import os
 from glob import glob
 
@@ -7,7 +7,7 @@ package_name = 'tb4_nav_patrol'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=[package_name],
+    packages=find_packages(exclude=["test", "scripts"]),
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -22,7 +22,7 @@ setup(
     license='Apache-2.0',
     entry_points={
         'console_scripts': [
-            'patrol_node = scripts.patrol_node:main'
+            'patrol_node = tb4_nav_patrol.patrol_node:main'
         ],
     },
 )

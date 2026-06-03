@@ -11,6 +11,11 @@
   <depend>tb4_vision_oak</depend>
   <depend>tb4_object_localization</depend>
   <depend>tb4_mission_manager</depend>
+  <depend>ament_index_python</depend>
+  <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <exec_depend>slam_toolbox</exec_depend>
+  <exec_depend>turtlebot4_navigation</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

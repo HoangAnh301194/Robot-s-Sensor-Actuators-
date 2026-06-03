@@ -5,26 +5,18 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Launch file for TB4 Navigation2 patrol."""
+    """Launch file for patrol logic only.
 
-    ld = LaunchDescription()
+    Nav2 is brought up by tb4_bringup so this launch keeps the module focused on
+    waypoint patrol behavior.
+    """
 
-    # Navigation2 node
-    nav2_node = Node(
-        package="nav2_bringup",
-        executable="bringup_launch.py",
-        output="screen",
-        # parameters=[...]
+    return LaunchDescription(
+        [
+            Node(
+                package="tb4_nav_patrol",
+                executable="patrol_node",
+                output="screen",
+            )
+        ]
     )
-
-    # Patrol logic node
-    patrol_node = Node(
-        package="tb4_nav_patrol",
-        executable="patrol_node.py",
-        output="screen",
-    )
-
-    ld.add_action(nav2_node)
-    ld.add_action(patrol_node)
-
-    return ld

@@ -1,78 +1,36 @@
-﻿# 📦 tb4_mission_manager (Mission Management & Goal Generation)
+# 📦 tb4_mission_manager
 
-## 📖 1. Tổng quan (Overview)
+## Tổng quan
 
-`tb4_mission_manager` là package ROS 2 (Humble) chịu trách nhiệm:
+`tb4_mission_manager` điều phối pha "phát hiện mục tiêu -> tiếp cận an toàn -> trả quyền tuần tra lại".
 
-- Quản lý trạng thái hệ thống (state machine)
-- Sinh goal tiếp cận an toàn dựa trên vị trí vật thể 3D
-- Điều phối luồng hoạt động: tuần tra → phát hiện → tiếp cận → dừng an toàn → tiếp tục tuần tra
-- Gửi goal cho Nav2 và xử lý feedback
+Node này nhận pose mục tiêu tương đối từ `tb4_object_localization`, biến đổi sang `map`, tính safe approach goal, rồi gửi trực tiếp đến Nav2 qua action `navigate_to_pose`.
 
----
+## Node chính
 
-## 🏗️ 2. Kiến trúc Node
+- Executable: `mission_manager_node`
+- Mã nguồn chính: `tb4_mission_manager/mission_manager_node.py`
+- Wrapper tương thích: `scripts/mission_manager_node.py`
 
-### Node: `mission_manager_node`
+## Hành vi
 
-- **File thực thi:** `scripts/mission_manager_node.py`
-- **Trạng thái:** ✅ Hoàn thành
+- Subscribe `/target_object_pose_map`
+- Lookup TF từ `oakd_link` sang `map`
+- Tính goal cách mục tiêu một khoảng `safe_distance`
+- Publish `false` lên `/mission_manager/patrol_enabled` để tạm dừng patrol
+- Gửi goal tiếp cận qua `NavigateToPose`
+- Khi xong, publish `true` để patrol tiếp tục
+- Có cooldown ngắn để tránh re-trigger liên tục cùng một mục tiêu
 
-### Chức năng chính
+## Parameters
 
-- Subscribe tọa độ vật thể từ topic `/target_object_pose_map`
-- Tính toán safe goal cách vật thể 0.5 mét
-- Publish goal đến topic `/goal_pose` cho Nav2
+- `safe_distance` mặc định `1.0`
+- `target_cooldown_sec` mặc định `5.0`
 
-### Logic tính toán Safe Goal
-
-```python
-distance = sqrt(obj_x^2 + obj_y^2)
-if distance > safe_distance:
-    ratio = (distance - safe_distance) / distance
-    goal_x = obj_x * ratio
-    goal_y = obj_y * ratio
-```
-
----
-
-## 📡 3. Giao tiếp Topics
-
-| Topic | Msg Type | Mô tả |
-|-------|----------|-------|
-| `/target_object_pose_map` | `geometry_msgs/PoseStamped` | Nhận vị trí 3D vật thể từ tb4_object_localization |
-| `/goal_pose` | `geometry_msgs/PoseStamped` | Gửi goal tiếp cận cho Nav2 |
-
----
-
-## 📂 4. Cấu trúc thư mục
-
-```
-tb4_mission_manager/
-├── launch/
-│   └── mission_manager.launch.py    # Launch mission manager node
-├── config/                          # Goal generation parameters
-├── scripts/
-│   └── mission_manager_node.py     # Logic sinh safe goal
-└── README.md                        # Tài liệu này
-```
-
----
-
-## 🔨 5. Build & Run
+## Chạy module
 
 ```bash
-# Build
 colcon build --packages-select tb4_mission_manager
 source install/setup.bash
-
-# Chạy
 ros2 launch tb4_mission_manager mission_manager.launch.py
 ```
-
----
-
-## 📚 6. Tài liệu tham khảo
-
-- [Nav2 Goal API](https://docs.nav2.org/)
-- [ROS 2 Actions](https://docs.ros.org/en/humble/Concepts/Intermediate/Actions.html)

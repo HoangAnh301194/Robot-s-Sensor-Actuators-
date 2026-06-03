@@ -5,6 +5,8 @@
 
 Module này tiếp nhận thông tin ma trận chiều sâu (Depth Map) và thông số kỹ thuật (Intrinsics) từ camera OAK-D mô phỏng, kết hợp với tọa độ pixel vùng nhận diện (2D Bounding Box) từ module thị giác (`tb4_vision_oak`) để tính toán chính xác khoảng cách và tọa độ vật lý $X, Y, Z$ của mục tiêu theo mô hình camera lỗ kim (Pinhole Camera Model). Sau đó, vị trí này được phát tán (broadcast) lên hệ thống dưới dạng một phối cảnh tọa độ động (TF Dynamic Transform) để hiển thị trực quan trên RViz2.
 
+Với YOLOv8n, node ưu tiên detection class `person` (`class_id=0`) và publish thêm marker chấm tròn màu đỏ/cam trên topic `/target_object_marker` để debug trong RViz.
+
 ---
 
 ## 🏗️ 2. Kiến trúc Node (Node Architecture)
@@ -27,6 +29,14 @@ Module này tiếp nhận thông tin ma trận chiều sâu (Depth Map) và thô
   * **Mô tả:** Nhận các thông số nội tại (Intrinsic Parameters) của camera để lấy ma trận $K$ phục vụ tính toán hình học chiếu.
 * **`/oakd/rgb/preview/depth`** (`sensor_msgs/msg/Image`)
   * **Mô tả:** Tiếp nhận luồng dữ liệu chiều sâu tương ứng với khung hình camera. Giá trị của mỗi pixel biểu thị khoảng cách từ camera đến bề mặt vật thể vật lý.
+* **`/vision/detected_objects`** (`vision_msgs/msg/Detection2DArray`)
+  * **Mô tả:** Nhận bounding box từ YOLOv8n; ưu tiên class `person` nếu có.
+
+### 📤 Published Topics (Dữ liệu đầu ra)
+* **`/target_object_pose_map`** (`geometry_msgs/msg/PoseStamped`)
+  * **Mô tả:** Pose 3D của mục tiêu trong frame camera `oakd_link` để Mission Manager sử dụng.
+* **`/target_object_marker`** (`visualization_msgs/msg/Marker`)
+  * **Mô tả:** Chấm tròn debug mục tiêu/người trong RViz. RViz Fixed Frame có thể để `map` nếu cây TF `map -> ... -> oakd_link` đang đầy đủ.
 
 ### 📍 Cấu hình hệ tọa độ TF (Transform Broadcaster)
 Node sử dụng `tf2_ros.TransformBroadcaster` để liên tục phát tọa độ vị trí của vật thể được phát hiện vào cây tọa độ chung của hệ thống:

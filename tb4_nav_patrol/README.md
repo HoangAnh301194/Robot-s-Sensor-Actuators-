@@ -1,71 +1,40 @@
-﻿# 📦 tb4_nav_patrol (Nav2 Patrol & Simulation)
+# 📦 tb4_nav_patrol
 
-## 📖 1. Tổng quan (Overview)
+## Tổng quan
 
-`tb4_nav_patrol` là package ROS 2 (Humble) chịu trách nhiệm:
+`tb4_nav_patrol` chứa logic tuần tra waypoint bằng `NavigateToPose` action client.
 
-- Cấu hình Navigation2 (Nav2) cho TurtleBot 4 Lite
-- Thiết lập hành vi tuần tra tự động trong bản đồ đã biết
-- Quản lý map và localization (AMCL)
-- Cung cấp launch file cho mô phỏng Gazebo
+Package này **không tự bring up Nav2** nữa. Nó giả định Nav2 đã được khởi động bởi `tb4_bringup` hoặc một navigation stack bên ngoài.
 
----
+## Node chính
 
-## 🏗️ 2. Kiến trúc Node
+- Executable: `patrol_node`
+- Mã nguồn chính: `tb4_nav_patrol/patrol_node.py`
+- Wrapper tương thích: `scripts/patrol_node.py`
 
-### Node: `patrol_node`
+## Hành vi
 
-- **File thực thi:** `scripts/patrol_node.py`
-- **Trạng thái:** ✅ Hoàn thành
+- Gửi tuần tự các waypoint trong frame `map`
+- Tự lặp lại sau waypoint cuối
+- Tạm dừng khi nhận `false` từ topic `/mission_manager/patrol_enabled`
+- Hủy goal hiện tại để nhường Nav2 cho `tb4_mission_manager`
+- Tiếp tục tuần tra khi nhận lại `true`
 
-### Chức năng chính
+## Giao tiếp
 
-- Sử dụng `ActionClient` để giao tiếp với Nav2 (`NavigateToPose`)
-- Quản lý danh sách waypoints (x, y, w)
-- Tự động chuyển sang waypoint tiếp theo khi đến đích
-- Tạm dừng 2 giây giữa các waypoint
+- Action client `navigate_to_pose`
+- Topic subscribe `/mission_manager/patrol_enabled` (`std_msgs/Bool`)
 
----
-
-## 📡 3. Giao tiếp Topics
-
-| Topic | Msg Type | Mô tả |
-|-------|----------|-------|
-| `/navigate_to_pose` | `nav2_msgs/NavigateToPose` | Action goal gửi cho Nav2 |
-| `/map` | `nav_msgs/OccupancyGrid` | Bản đồ occupancy grid |
-| `/amcl_pose` | `geometry_msgs/PoseWithCovarianceStamped` | Vị trí hiện tại của robot |
-
----
-
-## 📂 4. Cấu trúc thư mục
-
-```
-tb4_nav_patrol/
-├── launch/
-│   └── nav_patrol.launch.py        # Launch Nav2 + patrol node
-├── config/                          # Nav2 config files, map files
-├── scripts/
-│   └── patrol_node.py              # Node logic tuần tra (Action Client)
-└── README.md                        # Tài liệu này
-```
-
----
-
-## 🔨 5. Build & Run
+## Chạy module
 
 ```bash
-# Build
 colcon build --packages-select tb4_nav_patrol
 source install/setup.bash
-
-# Chạy
 ros2 launch tb4_nav_patrol nav_patrol.launch.py
 ```
 
----
+Để chạy đầy đủ cùng Nav2, dùng:
 
-## 📚 6. Tài liệu tham khảo
-
-- [Nav2 Documentation](https://docs.nav2.org/)
-- [TurtleBot 4 Guide](https://turtlebot.github.io/turtlebot4-user-manual/)
-- [Nav2 Waypoint Follower](https://docs.nav2.org/configuration/packages/configuring-waypoint-follower.html)
+```bash
+ros2 launch tb4_bringup sim_demo.launch.py map:=/path/to/map.yaml
+```

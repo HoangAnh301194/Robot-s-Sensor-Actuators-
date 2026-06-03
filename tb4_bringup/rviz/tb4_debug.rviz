@@ -1,0 +1,173 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Name: Tool Properties
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+      Plane: XY
+      Plane Cell Count: 20
+      Reference Frame: <Fixed Frame>
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+      Update Interval: 0
+    - Class: rviz_default_plugins/RobotModel
+      Enabled: true
+      Name: RobotModel
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+    - Class: rviz_default_plugins/Map
+      Enabled: true
+      Name: Map /map
+      Topic:
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map
+      Alpha: 0.7
+      Draw Behind: true
+    - Class: rviz_default_plugins/LaserScan
+      Enabled: true
+      Name: LaserScan /scan
+      Topic:
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /scan
+      Size (m): 0.03
+      Style: Points
+      Color: 255; 0; 0
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: SLAM Graph
+      Topic:
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /slam_toolbox/graph_visualization
+    - Class: rviz_default_plugins/LaserScan
+      Enabled: false
+      Name: SLAM Scan Visualization
+      Topic:
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /slam_toolbox/scan_visualization
+      Size (m): 0.03
+      Style: Points
+      Color: 0; 255; 255
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: Camera Raw
+      Topic:
+        Value: /oakd/rgb/preview/image_raw
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Normalize Range: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: Vision Debug BBox
+      Topic:
+        Value: /vision/debug_image
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Normalize Range: true
+    - Class: rviz_default_plugins/Pose
+      Enabled: true
+      Name: Target Object Pose
+      Topic:
+        Value: /target_object_pose_map
+      Shape: Arrow
+      Shaft Length: 0.5
+      Shaft Radius: 0.05
+      Head Length: 0.2
+      Head Radius: 0.1
+      Color: 255; 25; 0
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Target Object Marker
+      Topic:
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /target_object_marker
+    - Class: rviz_default_plugins/Path
+      Enabled: true
+      Name: Nav2 Plan
+      Topic:
+        Value: /plan
+      Color: 0; 255; 0
+      Line Style: Lines
+      Line Width: 0.03
+    - Class: rviz_default_plugins/Map
+      Enabled: false
+      Name: Global Costmap
+      Topic:
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /global_costmap/costmap
+      Alpha: 0.5
+    - Class: rviz_default_plugins/Map
+      Enabled: false
+      Name: Local Costmap
+      Topic:
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /local_costmap/costmap
+      Alpha: 0.5
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+    - Class: rviz_default_plugins/SetInitialPose
+      Topic:
+        Value: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Value: /goal_pose
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 12
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Name: Orbit
+      Pitch: 0.785
+      Target Frame: <Fixed Frame>
+      Yaw: 0.785
+    Saved: ~
+Window Geometry:
+  Height: 900
+  Width: 1400

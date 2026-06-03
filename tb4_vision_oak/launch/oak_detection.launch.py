@@ -2,24 +2,43 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    # 1. Tìm đường dẫn đến thư mục share của gói tb4_vision_oak sau khi build
     package_dir = get_package_share_directory("tb4_vision_oak")
-
-    # 2. Định vị chính xác file camera_params.yaml trong thư mục config
     config_file_path = os.path.join(package_dir, "config", "camera_params.yaml")
+    show_debug_window = LaunchConfiguration("show_debug_window")
+    publish_debug_image = LaunchConfiguration("publish_debug_image")
 
-    # 3. Cấu hình Node để khởi chạy
     detection_node = Node(
-        package="tb4_vision_oak",  # Tên gói ROS 2
-        executable="detection_node.py",  # Tên file script xử lý
-        name="oakd_detection_node",  # Tên Node khi chạy (phải trùng với tên trong file yaml)
-        parameters=[config_file_path],  # Nạp file cấu hình thông số
-        output="screen",  # Đẩy toàn bộ log/print ra màn hình terminal
+        package="tb4_vision_oak",
+        executable="detection_node",
+        name="oakd_detection_node",
+        parameters=[
+            config_file_path,
+            {
+                "show_debug_window": show_debug_window,
+                "publish_debug_image": publish_debug_image,
+            },
+        ],
+        output="screen",
     )
 
-    # 4. Trả về đối tượng LaunchDescription chứa node vừa cấu hình
-    return LaunchDescription([detection_node])
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "show_debug_window",
+                default_value="false",
+                description="Hiển thị khung hình detection qua OpenCV.",
+            ),
+            DeclareLaunchArgument(
+                "publish_debug_image",
+                default_value="true",
+                description="Publish ảnh debug đã vẽ bounding box lên /vision/debug_image.",
+            ),
+            detection_node,
+        ]
+    )

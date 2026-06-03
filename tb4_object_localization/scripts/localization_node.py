@@ -1,11 +1,13 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 import numpy as np
 import rclpy
 import tf2_ros
 from cv_bridge import CvBridge
 from geometry_msgs.msg import TransformStamped, PoseStamped
 from rclpy.node import Node
+from rclpy.duration import Duration
 from sensor_msgs.msg import CameraInfo, Image
+from visualization_msgs.msg import Marker
 from vision_msgs.msg import Detection2DArray
 
 class ObjectLocalizationNode(Node):
@@ -21,6 +23,7 @@ class ObjectLocalizationNode(Node):
 
         # Publisher gửi vị trí vật thể cho Mission Manager
         self.pose_pub = self.create_publisher(PoseStamped, "/target_object_pose_map", 10)
+        self.marker_pub = self.create_publisher(Marker, "/target_object_marker", 10)
 
         # Đăng ký nhận thông số Camera
         self.create_subscription(
@@ -38,6 +41,10 @@ class ObjectLocalizationNode(Node):
         # Biến lưu tọa độ (u, v) trung tâm vật thể phát hiện được
         self.detected_u = None
         self.detected_v = None
+        self.detected_size_x = 0.0
+        self.detected_size_y = 0.0
+        self.detected_class_id = None
+        self.detected_score = 0.0
 
         self.get_logger().info("Node 3D Object Localization đã khởi động!")
 
@@ -51,13 +58,33 @@ class ObjectLocalizationNode(Node):
     def detection_callback(self, msg):
         # Khi nhận được vật thể mới, cập nhật tọa độ u, v
         if len(msg.detections) > 0:
-            det = msg.detections[0] # Ưu tiên vật thể đầu tiên (confidence cao nhất)
+            det = self.select_person_detection(msg.detections)
             self.detected_u = int(det.bbox.center.position.x)
             self.detected_v = int(det.bbox.center.position.y)
+            self.detected_size_x = float(det.bbox.size_x)
+            self.detected_size_y = float(det.bbox.size_y)
+            self.detected_class_id = det.results[0].hypothesis.class_id if det.results else ""
+            self.detected_score = det.results[0].hypothesis.score if det.results else 0.0
             # self.get_logger().info(f"Đã nhận diện vật thể tại: ({self.detected_u}, {self.detected_v})")
         else:
             self.detected_u = None
             self.detected_v = None
+            self.detected_size_x = 0.0
+            self.detected_size_y = 0.0
+            self.detected_class_id = None
+            self.detected_score = 0.0
+
+    def select_person_detection(self, detections):
+        # YOLOv8 COCO: class_id "0" là person. Nếu không có person thì lấy detection đầu tiên.
+        person_detections = [
+            det for det in detections
+            if det.results and det.results[0].hypothesis.class_id == "0"
+        ]
+        candidates = person_detections if person_detections else detections
+        return max(
+            candidates,
+            key=lambda det: det.results[0].hypothesis.score if det.results else 0.0,
+        )
 
     def depth_callback(self, msg):
         if self.fx is None:
@@ -73,13 +100,10 @@ class ObjectLocalizationNode(Node):
                 u = min(self.detected_u, width - 1)
                 v = min(self.detected_v, height - 1)
 
-                # Lấy giá trị khoảng cách Z
-                Z = depth_image[v, u]
-                if Z <= 0 or np.isnan(Z):
+                # Lấy khoảng cách Z bằng median quanh tâm bbox để tránh pixel depth lỗi.
+                Z_m = self.get_depth_meters(depth_image, u, v)
+                if Z_m is None:
                     return
-
-                # Chuyển đổi mm sang mét
-                Z_m = Z / 1000.0
 
                 # Tính tọa độ 3D (Xc, Yc, Zc) theo mô hình Pinhole
                 X_c = (u - self.cx) * Z_m / self.fx
@@ -105,9 +129,57 @@ class ObjectLocalizationNode(Node):
                 pose_msg.pose.orientation.w = 1.0
 
                 self.pose_pub.publish(pose_msg)
+                self.publish_marker(pose_msg)
 
             except Exception as e:
                 self.get_logger().error(f"Lỗi tính toán Depth: {e}")
+
+    def publish_marker(self, pose_msg):
+        marker = Marker()
+        marker.header = pose_msg.header
+        marker.ns = "target_object"
+        marker.id = 0
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        marker.pose = pose_msg.pose
+        marker.scale.x = 0.35
+        marker.scale.y = 0.35
+        marker.scale.z = 0.35
+        marker.color.r = 1.0
+        marker.color.g = 0.15
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+        marker.lifetime = Duration(seconds=0.8).to_msg()
+        self.marker_pub.publish(marker)
+
+    def get_depth_meters(self, depth_image, u, v):
+        height, width = depth_image.shape
+        half_window = max(
+            2,
+            min(12, int(min(self.detected_size_x, self.detected_size_y) * 0.08)),
+        )
+        u_min = max(0, u - half_window)
+        u_max = min(width, u + half_window + 1)
+        v_min = max(0, v - half_window)
+        v_max = min(height, v + half_window + 1)
+
+        depth_patch = np.asarray(depth_image[v_min:v_max, u_min:u_max], dtype=np.float32)
+        valid_depths = depth_patch[np.isfinite(depth_patch) & (depth_patch > 0.0)]
+        if valid_depths.size == 0:
+            return None
+
+        depth_value = float(np.median(valid_depths))
+        if depth_value > 20.0:
+            depth_value /= 1000.0
+
+        if depth_value <= 0.02 or depth_value > 20.0:
+            self.get_logger().warn(
+                f"Depth không hợp lệ tại bbox center: {depth_value:.3f} m",
+                throttle_duration_sec=2.0,
+            )
+            return None
+
+        return depth_value
 
     def publish_tf(self, x, y, z, stamp):
         t = TransformStamped()
