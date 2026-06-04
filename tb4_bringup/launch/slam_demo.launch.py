@@ -8,7 +8,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
-from tb4_bringup.launch_utils import resolve_default_rviz_config
+from tb4_bringup.launch_utils import resolve_default_rviz_config, resolve_default_slam_params
 
 def generate_launch_description():
     """Launch file for SLAM mapping."""
@@ -28,15 +28,21 @@ def generate_launch_description():
         default_value="false",
         description="Show the OpenCV detection preview window.",
     )
+    slam_params_file_arg = DeclareLaunchArgument(
+        "slam_params_file",
+        default_value=resolve_default_slam_params(),
+        description="SLAM Toolbox parameters file.",
+    )
     use_sim_time = LaunchConfiguration("use_sim_time")
     use_rviz = LaunchConfiguration("use_rviz")
     show_debug_window = LaunchConfiguration("show_debug_window")
+    slam_params_file = LaunchConfiguration("slam_params_file")
 
     slam_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             [FindPackageShare("slam_toolbox"), "/launch/online_async_launch.py"]
         ),
-        launch_arguments={"use_sim_time": use_sim_time}.items(),
+        launch_arguments={"use_sim_time": use_sim_time, "slam_params_file": slam_params_file}.items(),
     )
 
     oak_detection_launch = IncludeLaunchDescription(
@@ -65,6 +71,7 @@ def generate_launch_description():
     ld.add_action(use_sim_time_arg)
     ld.add_action(use_rviz_arg)
     ld.add_action(show_debug_window_arg)
+    ld.add_action(slam_params_file_arg)
     ld.add_action(slam_launch)
     ld.add_action(oak_detection_launch)
     ld.add_action(localization_launch)

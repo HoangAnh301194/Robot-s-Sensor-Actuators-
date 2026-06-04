@@ -136,13 +136,48 @@ Các topic này đến từ simulator chính thức `turtlebot4_ignition_bringup
 
 ### Dọn sạch simulator cũ
 
-Gazebo/Ignition transport không tách hoàn toàn theo `ROS_DOMAIN_ID`. Nếu còn `ruby ign gazebo`, `parameter_bridge`, hoặc launch cũ bị treo, `/scan` có thể vẫn lấy dữ liệu world cũ và toàn `0.164`. Trước khi launch simulator, nên dọn sạch:
+Gazebo/Ignition transport không tách hoàn toàn theo `ROS_DOMAIN_ID`. Nếu còn `ruby ign gazebo`, `parameter_bridge`, launch cũ, hoặc FastDDS shared-memory lock cũ bị treo, ROS có thể nhìn thấy topic đúng tên nhưng dữ liệu đến từ world/session cũ. Triệu chứng thường gặp là `/scan` vẫn có rate nhưng toàn `0.164`, `/clock` không nhảy, robot không spawn đúng, hoặc controller chờ mãi.
+
+#### Dọn nhanh trước mỗi lần launch simulator
+
+Chạy lệnh này trước khi mở lại simulator:
 
 ```bash
-killall -9 ruby parameter_bridge robot_state_publisher joint_state_publisher spawner turtlebot4_node   hazards_vector_publisher ir_intensity_vector_publisher motion_control wheel_status_publisher   mock_publisher robot_state kidnap_estimator_publisher ui_mgr pose_republisher_node sensors_node   interface_buttons_node static_transform_publisher create ros2 2>/dev/null || true
+killall -9 ruby parameter_bridge robot_state_publisher joint_state_publisher spawner turtlebot4_node \
+  hazards_vector_publisher ir_intensity_vector_publisher motion_control wheel_status_publisher \
+  mock_publisher robot_state kidnap_estimator_publisher ui_mgr pose_republisher_node sensors_node \
+  interface_buttons_node static_transform_publisher create 2>/dev/null || true
 ```
 
-Sau đó mở terminal mới và source lại môi trường như phần trên.
+Nếu trước đó có nhiều terminal `ros2 launch` bị treo, kiểm tra và tự đóng/`Ctrl+C` terminal đó. Nếu cần dọn mạnh cả tiến trình launch ROS 2 cũ, dùng thêm:
+
+```bash
+pkill -9 -f "ros2 launch turtlebot4_ignition_bringup" 2>/dev/null || true
+pkill -9 -f "ros2 launch tb4_bringup" 2>/dev/null || true
+```
+
+#### Xóa cache/log/session tạm khi bị lỗi lặp lại
+
+Các lệnh dưới đây chỉ xóa file tạm/log/lock, không xóa source code hay package đã build:
+
+```bash
+rm -f /tmp/launch_params_* 2>/dev/null || true
+rm -f /dev/shm/fastrtps_* /dev/shm/sem.fastrtps_* 2>/dev/null || true
+rm -rf ~/.ros/log/* 2>/dev/null || true
+rm -rf ~/.ignition/gazebo/log/* ~/.gz/sim/log/* 2>/dev/null || true
+```
+
+Không nên xóa `~/.ignition/fuel` hoặc `~/.gz/fuel` trừ khi muốn tải lại toàn bộ model/world từ đầu.
+
+#### Kiểm tra còn server/session cũ không
+
+Sau khi dọn, kiểm tra:
+
+```bash
+ps -eo pid,comm,args | grep -E "ign gazebo|ruby|parameter_bridge|turtlebot4_ignition|robot_state_publisher" | grep -v grep
+```
+
+Nếu lệnh trên không in ra gì, môi trường đã sạch. Sau đó mở terminal mới và source lại môi trường như phần trên.
 
 ### Launch simulator TurtleBot4 Lite
 
@@ -154,7 +189,10 @@ export RMW_FASTRTPS_USE_SHM=0
 source /opt/ros/humble/setup.bash
 source ~/tb4_project_ab/install/setup.bash
 
-ros2 launch turtlebot4_ignition_bringup turtlebot4_ignition.launch.py   model:=lite   world:=warehouse   x:=2.0 y:=0.0 z:=0.01 yaw:=0.0
+ros2 launch turtlebot4_ignition_bringup turtlebot4_ignition.launch.py \
+  model:=lite \
+  world:=warehouse \
+  x:=2.0 y:=0.0 z:=0.01 yaw:=0.0
 ```
 
 Đợi đến khi thấy controller active:
@@ -372,7 +410,7 @@ Lưu map:
 
 ```bash
 mkdir -p ~/maps
-ros2 run nav2_map_server map_saver_cli -f ~/maps/warehouse_custom
+ros2 run nav2_map_server map_saver_cli -f ~/maps/warehouse_custom --ros-args -p map_subscribe_transient_local:=true
 ```
 
 Sau đó dừng SLAM, giữ simulator, rồi chạy full mission bằng map vừa lưu:
@@ -399,6 +437,122 @@ Lưu ý:
 - Nếu chỉ test detection/localization, RViz `Fixed Frame` có thể để `oakd_link`.
 - Nếu test full navigation/mission, RViz `Fixed Frame` nên để `map`.
 
+### Checklist triển khai end-to-end đã debug
+
+Dùng checklist này khi muốn chạy từ đầu tới cuối ổn định nhất.
+
+#### 1) Reset sạch
+
+```bash
+killall -9 ruby parameter_bridge robot_state_publisher joint_state_publisher spawner turtlebot4_node \
+  hazards_vector_publisher ir_intensity_vector_publisher motion_control wheel_status_publisher \
+  mock_publisher robot_state kidnap_estimator_publisher ui_mgr pose_republisher_node sensors_node \
+  interface_buttons_node static_transform_publisher create 2>/dev/null || true
+rm -f /tmp/launch_params_* 2>/dev/null || true
+rm -f /dev/shm/fastrtps_* /dev/shm/sem.fastrtps_* 2>/dev/null || true
+```
+
+#### 2) Launch simulator và xác minh scan/clock
+
+```bash
+export ROS_DOMAIN_ID=7
+export RMW_FASTRTPS_USE_SHM=0
+source /opt/ros/humble/setup.bash
+source ~/tb4_project_ab/install/setup.bash
+
+ros2 launch turtlebot4_ignition_bringup turtlebot4_ignition.launch.py \
+  model:=lite world:=warehouse x:=2.0 y:=0.0 z:=0.01 yaw:=0.0
+```
+
+Terminal kiểm tra:
+
+```bash
+ros2 topic echo /clock --once
+ros2 topic echo /scan --once
+ros2 topic echo /odom --once
+ros2 run tf2_ros tf2_echo odom base_link
+```
+
+`/scan` đúng phải có nhiều giá trị khác nhau. Nếu toàn `0.164`, đó là world/session cũ hoặc RPLIDAR chưa dùng overlay. Nếu `/clock` không ra dữ liệu, Gazebo server đang stall: dọn sạch và launch lại simulator.
+
+#### 3) Chạy SLAM và tự lái 3 phút
+
+```bash
+ros2 launch tb4_bringup slam_demo.launch.py use_sim_time:=true use_rviz:=true show_debug_window:=false
+```
+
+`tb4_bringup` dùng cấu hình SLAM riêng tại `tb4_bringup/config/slam_toolbox_tb4.yaml`, trong đó `base_frame: base_link`. Nếu dùng config mặc định của `slam_toolbox`, thường sẽ lỗi `Failed to compute odom pose` vì mặc định là `base_footprint`.
+
+Có thể lái bằng teleop:
+
+```bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
+```
+
+Hoặc lái tự động đơn giản để quét map:
+
+```bash
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.16}, angular: {z: 0.25}}" -r 10
+```
+
+Dừng robot:
+
+```bash
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.0}, angular: {z: 0.0}}" --once
+```
+
+#### 4) Lưu map đúng QoS
+
+`/map` của SLAM Toolbox publish kiểu `TRANSIENT_LOCAL`, nên dùng thêm `map_subscribe_transient_local:=true`:
+
+```bash
+mkdir -p ~/maps
+ros2 run nav2_map_server map_saver_cli -f ~/maps/tb4_e2e_test \
+  --ros-args -p map_subscribe_transient_local:=true
+```
+
+Kỳ vọng có:
+
+```text
+~/maps/tb4_e2e_test.yaml
+~/maps/tb4_e2e_test.pgm
+```
+
+#### 5) Restart simulator trước full stack
+
+Sau khi lưu map, dừng SLAM và simulator, dọn process/cache rồi launch simulator lại. Không nên chạy Nav2/full mission ngay trên cùng phiên Gazebo vừa SLAM nếu thấy `/clock` hoặc TF bị đứng.
+
+#### 6) Chạy full stack
+
+```bash
+ros2 launch tb4_bringup sim_demo.launch.py \
+  map:=~/maps/tb4_e2e_test.yaml \
+  use_sim_time:=true \
+  use_rviz:=true \
+  show_debug_window:=false \
+  auto_initial_pose:=true \
+  initial_pose_x:=0.0 \
+  initial_pose_y:=0.0 \
+  initial_pose_yaw:=0.0 \
+  patrol_start_delay:=45.0
+```
+
+`auto_initial_pose:=true` sẽ publish `/initialpose` cho AMCL sau khi Nav2 khởi động. `patrol_start_delay:=45.0` trì hoãn patrol để tránh gửi waypoint trước khi AMCL tạo `map -> odom`.
+
+Kiểm tra full stack:
+
+```bash
+ros2 run tf2_ros tf2_echo map odom
+ros2 run tf2_ros tf2_echo odom base_link
+ros2 action list | grep navigate
+ros2 topic echo /amcl_pose --once
+ros2 topic echo /target_object_marker --once
+```
+
+Nếu `tf2_echo map odom` chưa có, publish initial pose lại từ RViz bằng nút `2D Pose Estimate`, hoặc chạy lại full stack với `auto_initial_pose:=true` và đúng `initial_pose_x/y/yaw`.
+
 ### Troubleshooting nhanh
 
 | Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
@@ -409,6 +563,313 @@ Lưu ý:
 | `No map received` | Chưa chạy SLAM/localization với map | Chạy `slam_demo.launch.py` hoặc `sim_demo.launch.py` với `map:=...` |
 | FastRTPS SHM spam | Shared memory lock cũ | Export `RMW_FASTRTPS_USE_SHM=0` ở mọi terminal |
 | Không thấy `/imu` | TurtleBot4 Ignition sim không bridge OAK-D IMU mặc định | Cần tự thêm Gazebo IMU sensor + bridge nếu muốn dùng IMU |
+
+### Checklist debug đã kiểm chứng cho lỗi `/scan`
+
+Nếu chạy đúng mà `/scan` vẫn toàn `0.164` hoặc `1.0`, làm theo checklist này theo đúng thứ tự. Lỗi này thường không phải do SLAM, mà do **simulator/ROS graph cũ**, **RPLIDAR overlay chưa được dùng**, hoặc **ROS_DOMAIN_ID không đồng nhất**.
+
+#### 1) Không đổi `ROS_DOMAIN_ID` giữa chừng
+
+Chọn **một domain duy nhất** cho toàn bộ terminal. Khuyến nghị dùng `7` để tránh lẫn graph với project khác:
+
+```bash
+export ROS_DOMAIN_ID=7
+export RMW_FASTRTPS_USE_SHM=0
+source /opt/ros/humble/setup.bash
+source ~/tb4_project_ab/install/setup.bash
+ros2 daemon stop 2>/dev/null || true
+ros2 daemon start
+```
+
+Nếu trước đó từng chạy bằng `ROS_DOMAIN_ID=0`, phải dừng toàn bộ process và restart daemon. Không chạy simulator ở domain `0` nhưng kiểm tra topic ở domain `7`, vì khi đó `ros2 topic list` có thể không thấy node/topic thật.
+
+Kiểm tra terminal hiện tại đang ở domain nào:
+
+```bash
+echo $ROS_DOMAIN_ID
+ros2 daemon status
+```
+
+Nếu `.bashrc` có nhiều dòng `export ROS_DOMAIN_ID=0`, hãy sửa lại hoặc luôn export `ROS_DOMAIN_ID=7` ở cuối terminal trước khi launch. Sau khi đổi domain, luôn chạy:
+
+```bash
+ros2 daemon stop
+ros2 daemon start
+```
+
+#### 2) Dọn mạnh toàn bộ session cũ
+
+Khi simulator bị treo, `killall` thường chưa đủ vì còn `ign gazebo server/gui`, `ros2 launch`, hoặc `python3` node con. Dùng khối lệnh này trước khi test lại:
+
+```bash
+killall -9 ruby ign create parameter_bridge robot_state_publisher joint_state_publisher spawner \
+  turtlebot4_node hazards_vector_publisher ir_intensity_vector_publisher motion_control \
+  wheel_status_publisher mock_publisher robot_state kidnap_estimator_publisher ui_mgr \
+  pose_republisher_node sensors_node interface_buttons_node static_transform_publisher \
+  rviz2 async_slam_toolbox_node 2>/dev/null || true
+
+pkill -9 -f "ros2 launch turtlebot4_ignition_bringup" 2>/dev/null || true
+pkill -9 -f "ros2 launch tb4_bringup" 2>/dev/null || true
+pkill -9 -f "ign gazebo" 2>/dev/null || true
+pkill -9 -f "parameter_bridge" 2>/dev/null || true
+
+rm -f /tmp/launch_params_* 2>/dev/null || true
+rm -f /dev/shm/fastrtps_* /dev/shm/sem.fastrtps_* 2>/dev/null || true
+
+ros2 daemon stop 2>/dev/null || true
+```
+
+Sau đó mở terminal mới hoặc source lại môi trường:
+
+```bash
+export ROS_DOMAIN_ID=7
+export RMW_FASTRTPS_USE_SHM=0
+source /opt/ros/humble/setup.bash
+source ~/tb4_project_ab/install/setup.bash
+ros2 daemon start
+```
+
+#### 3) Kiểm tra overlay RPLIDAR đang được dùng
+
+```bash
+ros2 pkg prefix turtlebot4_description
+```
+
+Kỳ vọng phải là workspace overlay:
+
+```text
+/home/hoang_anh/tb4_project_ab/install/turtlebot4_description
+```
+
+Nếu ra `/opt/ros/humble`, build và source lại:
+
+```bash
+cd ~/tb4_project_ab
+PYTHONNOUSERSITE=1 colcon build --symlink-install \
+  --packages-select turtlebot4_description \
+  --allow-overriding turtlebot4_description
+source install/setup.bash
+```
+
+Kiểm tra URDF đã nâng lidar lên cao chưa:
+
+```bash
+ros2 run xacro xacro \
+  ~/tb4_project_ab/src/turtlebot4_description/urdf/lite/turtlebot4.urdf.xacro \
+  gazebo:=ignition | grep rplidar_joint -A 5
+```
+
+Kỳ vọng `xyz` của `rplidar_joint` có `z` khoảng `0.2642`, không phải khoảng `0.139`.
+
+#### Lỗi diffdrive_controller inactive / Switch controller timed out
+
+Nếu thấy log:
+
+```text
+[ERROR] Switch controller timed out after 5.000000 seconds!
+[ERROR] Failed to activate controller : diffdrive_controller
+```
+
+Nguyên nhân: Gazebo physics chạy chậm (do máy nặng, load world lâu, GUI rendering), trong khi spawner mặc định chỉ đợi **5 giây** để switch controller.
+
+Cách sửa: workspace overlay `irobot_create_control` đã được tạo tại `~/tb4_project_ab/src/irobot_create_control/` với 2 thay đổi:
+
+1. `config/control.yaml`: giảm `update_rate` từ `1000` xuống `50` Hz
+2. `launch/include/control.py`: thêm `--controller-manager-timeout 60 --switch-timeout 30` cho spawner
+
+Build lại overlay nếu chưa có:
+
+```bash
+cd ~/tb4_project_ab
+PYTHONNOUSERSITE=1 colcon build --symlink-install \
+  --packages-select irobot_create_control \
+  --allow-overriding irobot_create_control
+source install/setup.bash
+```
+
+Kiểm tra overlay đúng:
+
+```bash
+ros2 pkg prefix irobot_create_control
+```
+
+Kỳ vọng:
+
+```text
+/home/hoang_anh/tb4_project_ab/install/irobot_create_control
+```
+
+Nếu overlay đúng mà vẫn timeout, kiểm tra `/clock` có nhảy không (nếu `sec: 0` không tăng, Gazebo bị đứng — cần đợi GUI render xong hoặc click Play trong Gazebo).
+
+#### 4) Launch simulator rồi đợi đủ lâu
+
+```bash
+ros2 launch turtlebot4_ignition_bringup turtlebot4_ignition.launch.py \
+  model:=lite world:=warehouse x:=2.0 y:=0.0 z:=0.01 yaw:=0.0
+```
+
+Đợi ít nhất 20-30 giây, tới khi robot spawn xong và controller active. Nếu thấy `Waiting messages on topic [robot_description]` quá lâu, chưa nên chạy SLAM/Nav2.
+
+Terminal kiểm tra:
+
+```bash
+export ROS_DOMAIN_ID=7
+export RMW_FASTRTPS_USE_SHM=0
+source /opt/ros/humble/setup.bash
+source ~/tb4_project_ab/install/setup.bash
+ros2 daemon stop
+ros2 daemon start
+
+ros2 node list | grep lidar
+ros2 topic echo /clock --once
+ros2 topic echo /scan --once
+ros2 topic echo /odom --once
+```
+
+`/scan` đúng sẽ có nhiều giá trị khác nhau, ví dụ:
+
+```text
+- .inf
+- 11.7
+- 9.9
+- 6.3
+- 5.0
+```
+
+Nếu `/scan` chỉ toàn `0.164`, nguyên nhân gần như chắc chắn là world/session cũ hoặc overlay chưa được dùng. Quay lại bước dọn mạnh.
+
+#### 5) Điều kiện tối thiểu trước khi chạy SLAM
+
+Chỉ chạy `slam_demo.launch.py` khi các lệnh này đều có dữ liệu:
+
+```bash
+ros2 topic hz /clock
+ros2 topic hz /scan
+ros2 topic echo /odom --once
+ros2 run tf2_ros tf2_echo odom base_link
+```
+
+Nếu `/scan` có dữ liệu nhưng `tf2_echo odom base_link` không có transform, SLAM sẽ không tạo `/map`. Khi đó cần kiểm tra controller/diffdrive trong log simulator, không debug ở `slam_toolbox` trước.
+
+### Quy trình end-to-end khuyến nghị
+
+Quy trình ổn định nhất là tách thành 2 phiên: **phiên SLAM để tạo map**, sau đó **restart simulator** và chạy full mission với map vừa lưu.
+
+#### Phiên A: quét map SLAM trong 3 phút
+
+Terminal 1: dọn sạch và launch simulator.
+
+```bash
+export ROS_DOMAIN_ID=7
+export RMW_FASTRTPS_USE_SHM=0
+source /opt/ros/humble/setup.bash
+source ~/tb4_project_ab/install/setup.bash
+
+ros2 launch turtlebot4_ignition_bringup turtlebot4_ignition.launch.py \
+  model:=lite world:=warehouse x:=2.0 y:=0.0 z:=0.01 yaw:=0.0
+```
+
+Terminal 2: chạy SLAM + RViz.
+
+```bash
+export ROS_DOMAIN_ID=7
+export RMW_FASTRTPS_USE_SHM=0
+source /opt/ros/humble/setup.bash
+source ~/tb4_project_ab/install/setup.bash
+
+ros2 launch tb4_bringup slam_demo.launch.py \
+  use_sim_time:=true \
+  use_rviz:=true \
+  show_debug_window:=false
+```
+
+Terminal 3: lái robot tự do trong khoảng 3 phút.
+
+```bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
+```
+
+Nếu muốn tự động quay/chạy chậm để test nhanh:
+
+```bash
+timeout 180s ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.16}, angular: {z: 0.25}}" -r 10
+
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.0}, angular: {z: 0.0}}" --once
+```
+
+Lưu map:
+
+```bash
+mkdir -p ~/maps
+ros2 run nav2_map_server map_saver_cli -f ~/maps/tb4_e2e_test \
+  --ros-args -p map_subscribe_transient_local:=true
+```
+
+Kiểm tra file:
+
+```bash
+ls -lh ~/maps/tb4_e2e_test.yaml ~/maps/tb4_e2e_test.pgm
+```
+
+#### Phiên B: chạy full mission trên map đã lưu
+
+Dừng toàn bộ phiên SLAM/simulator bằng `Ctrl+C`, sau đó dọn mạnh bằng khối cleanup ở trên. Launch simulator lại từ đầu.
+
+Terminal 1:
+
+```bash
+export ROS_DOMAIN_ID=7
+export RMW_FASTRTPS_USE_SHM=0
+source /opt/ros/humble/setup.bash
+source ~/tb4_project_ab/install/setup.bash
+
+ros2 launch turtlebot4_ignition_bringup turtlebot4_ignition.launch.py \
+  model:=lite world:=warehouse x:=2.0 y:=0.0 z:=0.01 yaw:=0.0
+```
+
+Terminal 2: chạy toàn bộ stack.
+
+```bash
+export ROS_DOMAIN_ID=7
+export RMW_FASTRTPS_USE_SHM=0
+source /opt/ros/humble/setup.bash
+source ~/tb4_project_ab/install/setup.bash
+
+ros2 launch tb4_bringup sim_demo.launch.py \
+  map:=~/maps/tb4_e2e_test.yaml \
+  use_sim_time:=true \
+  use_rviz:=true \
+  show_debug_window:=false \
+  auto_initial_pose:=true \
+  initial_pose_x:=0.0 \
+  initial_pose_y:=0.0 \
+  initial_pose_yaw:=0.0 \
+  patrol_start_delay:=45.0
+```
+
+Kiểm tra full stack:
+
+```bash
+ros2 topic echo /amcl_pose --once
+ros2 run tf2_ros tf2_echo map odom
+ros2 run tf2_ros tf2_echo odom base_link
+ros2 action list | grep navigate
+ros2 topic echo /vision/detected_objects --once
+ros2 topic echo /target_object_marker --once
+```
+
+Trong RViz nên bật các display:
+
+- `Map`: `/map`
+- `LaserScan`: `/scan`
+- `TF`: kiểm tra `map -> odom -> base_link -> oakd_link`
+- `Image`: `/vision/debug_image` hoặc `/oakd/rgb/preview/image_raw`
+- `Marker`: `/target_object_marker`
+- `MarkerArray`: `/target_object_marker_array`
+- `Pose`: `/target_object_pose_map`
+- `Path`: `/plan`, `/local_plan` nếu cần debug Nav2
 
 ### Chạy trên robot thật
 

@@ -46,3 +46,12 @@ def resolve_default_rviz_config():
             ("nav2_bringup", ("rviz", "nav2_default_view.rviz")),
         ]
     )
+
+
+def resolve_default_slam_params():
+    return _resolve_first_existing_path(
+        [
+            ("tb4_bringup", ("config", "slam_toolbox_tb4.yaml")),
+            ("slam_toolbox", ("config", "mapper_params_online_async.yaml")),
+        ]
+    )

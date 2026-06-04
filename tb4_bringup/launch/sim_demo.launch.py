@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.conditions import IfCondition
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
+from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -22,6 +22,11 @@ def generate_launch_description():
     params_file = LaunchConfiguration("params_file")
     use_rviz = LaunchConfiguration("use_rviz")
     show_debug_window = LaunchConfiguration("show_debug_window")
+    auto_initial_pose = LaunchConfiguration("auto_initial_pose")
+    initial_pose_x = LaunchConfiguration("initial_pose_x")
+    initial_pose_y = LaunchConfiguration("initial_pose_y")
+    initial_pose_yaw = LaunchConfiguration("initial_pose_yaw")
+    patrol_start_delay = LaunchConfiguration("patrol_start_delay")
 
     nav_localization_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -42,10 +47,15 @@ def generate_launch_description():
         }.items(),
     )
 
-    nav_patrol_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [FindPackageShare("tb4_nav_patrol"), "/launch/nav_patrol.launch.py"]
-        )
+    nav_patrol_launch = TimerAction(
+        period=patrol_start_delay,
+        actions=[
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    [FindPackageShare("tb4_nav_patrol"), "/launch/nav_patrol.launch.py"]
+                )
+            )
+        ],
     )
 
     oak_detection_launch = IncludeLaunchDescription(
@@ -65,6 +75,21 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             [FindPackageShare("tb4_mission_manager"), "/launch/mission_manager.launch.py"]
         )
+    )
+
+    initial_pose_node = Node(
+        package="tb4_bringup",
+        executable="initial_pose_publisher",
+        name="tb4_initial_pose_publisher",
+        output="screen",
+        parameters=[
+            {"use_sim_time": use_sim_time},
+            {"x": initial_pose_x},
+            {"y": initial_pose_y},
+            {"yaw": initial_pose_yaw},
+            {"delay_sec": 8.0},
+        ],
+        condition=IfCondition(auto_initial_pose),
     )
 
     rviz_node = Node(
@@ -103,8 +128,34 @@ def generate_launch_description():
                 default_value="false",
                 description="Show the OpenCV detection preview window.",
             ),
+            DeclareLaunchArgument(
+                "auto_initial_pose",
+                default_value="true",
+                description="Publish an AMCL initial pose automatically for simulation.",
+            ),
+            DeclareLaunchArgument(
+                "initial_pose_x",
+                default_value="0.0",
+                description="Initial AMCL pose X in map frame.",
+            ),
+            DeclareLaunchArgument(
+                "initial_pose_y",
+                default_value="0.0",
+                description="Initial AMCL pose Y in map frame.",
+            ),
+            DeclareLaunchArgument(
+                "initial_pose_yaw",
+                default_value="0.0",
+                description="Initial AMCL yaw in radians.",
+            ),
+            DeclareLaunchArgument(
+                "patrol_start_delay",
+                default_value="35.0",
+                description="Delay patrol start until AMCL/Nav2 TF is ready.",
+            ),
             nav_localization_launch,
             nav2_launch,
+            initial_pose_node,
             nav_patrol_launch,
             oak_detection_launch,
             object_localization_launch,
