@@ -15,8 +15,8 @@ def generate_launch_description():
 
     use_sim_time_arg = DeclareLaunchArgument(
         "use_sim_time",
-        default_value="true",
-        description="Use simulation clock",
+        default_value="false",
+        description="Use simulation clock. Set true only for Gazebo/Ignition.",
     )
     use_rviz_arg = DeclareLaunchArgument(
         "use_rviz",

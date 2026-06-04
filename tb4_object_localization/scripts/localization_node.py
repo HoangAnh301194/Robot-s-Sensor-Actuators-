@@ -22,20 +22,20 @@ class ObjectLocalizationNode(Node):
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
 
         # Publisher gửi vị trí vật thể cho Mission Manager
-        self.pose_pub = self.create_publisher(PoseStamped, "/target_object_pose_map", 10)
-        self.marker_pub = self.create_publisher(Marker, "/target_object_marker", 10)
+        self.pose_pub = self.create_publisher(PoseStamped, self.target_pose_topic, 10)
+        self.marker_pub = self.create_publisher(Marker, self.marker_topic, 10)
 
         # Đăng ký nhận thông số Camera
         self.create_subscription(
-            CameraInfo, "/oakd/rgb/preview/camera_info", self.camera_info_callback, 10
+            CameraInfo, self.camera_info_topic, self.camera_info_callback, 10
         )
         # Đăng ký nhận ảnh Chiều sâu (Depth)
         self.create_subscription(
-            Image, "/oakd/rgb/preview/depth", self.depth_callback, 10
+            Image, self.depth_topic, self.depth_callback, 10
         )
         # Đăng ký nhận kết quả nhận diện 2D từ module Vision
         self.create_subscription(
-            Detection2DArray, "/vision/detected_objects", self.detection_callback, 10
+            Detection2DArray, self.detections_topic, self.detection_callback, 10
         )
 
         # Biến lưu tọa độ (u, v) trung tâm vật thể phát hiện được
@@ -111,13 +111,14 @@ class ObjectLocalizationNode(Node):
                 Z_c = Z_m
 
                 # 1. Publish TF (cho RViz2)
-                self.publish_tf(X_c, Y_c, Z_c, msg.header.stamp)
+                frame_id = self.resolve_camera_frame(msg.header.frame_id)
+                self.publish_tf(X_c, Y_c, Z_c, msg.header.stamp, frame_id)
 
                 # 2. Publish Pose (cho Mission Manager)
                 # Chuyển đổi từ tọa độ camera (Xc, Yc, Zc) sang tọa độ map theo chuẩn ROS
                 pose_msg = PoseStamped()
                 pose_msg.header = msg.header
-                pose_msg.header.frame_id = "oakd_link"
+                pose_msg.header.frame_id = frame_id
                 
                 # Ánh xạ trục: X_cam -> Z_ros (sâu), Y_cam -> -X_ros (ngang), Z_cam -> -Y_ros (cao)
                 # Lưu ý: Tọa độ này vẫn đang trong hệ quy chiếu của camera (oakd_link).
@@ -181,11 +182,18 @@ class ObjectLocalizationNode(Node):
 
         return depth_value
 
-    def publish_tf(self, x, y, z, stamp):
+    def resolve_camera_frame(self, msg_frame_id):
+        if self.camera_frame:
+            return self.camera_frame
+        if msg_frame_id:
+            return msg_frame_id
+        return "oakd_link"
+
+    def publish_tf(self, x, y, z, stamp, frame_id):
         t = TransformStamped()
         t.header.stamp = stamp
-        t.header.frame_id = "oakd_link"
-        t.child_frame_id = "detected_object_3d"
+        t.header.frame_id = frame_id
+        t.child_frame_id = self.target_frame
         
         # Ánh xạ trục sang chuẩn ROS
         t.transform.translation.x = float(z)

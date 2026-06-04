@@ -24,12 +24,18 @@ class SimDetectionNode(Node):
         self.declare_parameter("confidence_threshold", 0.5)
         self.declare_parameter("show_debug_window", False)
         self.declare_parameter("publish_debug_image", True)
+        self.declare_parameter("image_topic", "/oakd/rgb/preview/image_raw")
+        self.declare_parameter("detections_topic", "/vision/detected_objects")
+        self.declare_parameter("debug_image_topic", "/vision/debug_image")
 
         self.confidence_threshold = float(
             self.get_parameter("confidence_threshold").value
         )
         self.show_debug_window = bool(self.get_parameter("show_debug_window").value)
         self.publish_debug_image = bool(self.get_parameter("publish_debug_image").value)
+        self.image_topic = str(self.get_parameter("image_topic").value)
+        self.detections_topic = str(self.get_parameter("detections_topic").value)
+        self.debug_image_topic = str(self.get_parameter("debug_image_topic").value)
         self.window_enabled = self.show_debug_window and bool(os.environ.get("DISPLAY"))
         if self.show_debug_window and not self.window_enabled:
             self.get_logger().warn(
@@ -50,11 +56,11 @@ class SimDetectionNode(Node):
 
         # ── ROS publishers / subscribers ───────────────────────────────
         self.detection_pub = self.create_publisher(
-            Detection2DArray, "/vision/detected_objects", 10
+            Detection2DArray, self.detections_topic, 10
         )
-        self.debug_image_pub = self.create_publisher(Image, "/vision/debug_image", 10)
+        self.debug_image_pub = self.create_publisher(Image, self.debug_image_topic, 10)
         self.subscription = self.create_subscription(
-            Image, "/oakd/rgb/preview/image_raw", self.image_callback, 10
+            Image, self.image_topic, self.image_callback, 10
         )
         self.get_logger().info("Node AI nhận diện (YOLOv8) đã khởi động.")
 

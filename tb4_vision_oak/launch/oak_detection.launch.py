@@ -12,6 +12,9 @@ def generate_launch_description():
     config_file_path = os.path.join(package_dir, "config", "camera_params.yaml")
     show_debug_window = LaunchConfiguration("show_debug_window")
     publish_debug_image = LaunchConfiguration("publish_debug_image")
+    image_topic = LaunchConfiguration("image_topic")
+    detections_topic = LaunchConfiguration("detections_topic")
+    debug_image_topic = LaunchConfiguration("debug_image_topic")
 
     detection_node = Node(
         package="tb4_vision_oak",
@@ -22,6 +25,9 @@ def generate_launch_description():
             {
                 "show_debug_window": show_debug_window,
                 "publish_debug_image": publish_debug_image,
+                "image_topic": image_topic,
+                "detections_topic": detections_topic,
+                "debug_image_topic": debug_image_topic,
             },
         ],
         output="screen",

@@ -1,0 +1,11 @@
+﻿patrol_node:
+  ros__parameters:
+    frame_id: map
+    start_enabled: true
+    next_goal_delay_sec: 2.0
+    waypoints: [
+      1.0, 0.0, 0.0,
+      1.0, 1.0, 1.5708,
+      0.0, 1.0, 3.1416,
+      0.0, 0.0, -1.5708
+    ]

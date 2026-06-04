@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import math
+
 from action_msgs.msg import GoalStatus
 from nav2_msgs.action import NavigateToPose
 import rclpy
@@ -12,6 +14,26 @@ from std_msgs.msg import Bool
 class PatrolNode(Node):
     def __init__(self):
         super().__init__("patrol_node")
+
+        self.declare_parameter("frame_id", "map")
+        self.declare_parameter("start_enabled", True)
+        self.declare_parameter("next_goal_delay_sec", 2.0)
+        self.declare_parameter(
+            "waypoints",
+            [
+                1.0, 0.0, 0.0,
+                1.0, 1.0, 1.5708,
+                0.0, 1.0, 3.1416,
+                0.0, 0.0, -1.5708,
+            ],
+        )
+
+        self.frame_id = str(self.get_parameter("frame_id").value)
+        self.next_goal_delay_sec = float(self.get_parameter("next_goal_delay_sec").value)
+        self.waypoints = self.load_waypoints()
+        self.patrol_enabled = self.parse_bool(
+            self.get_parameter("start_enabled").value
+        )
 
         self.nav_client = ActionClient(self, NavigateToPose, "navigate_to_pose")
         qos = QoSProfile(
@@ -26,14 +48,7 @@ class PatrolNode(Node):
             qos,
         )
 
-        self.waypoints = [
-            (1.0, 0.0, 1.0),
-            (1.0, 1.0, 1.0),
-            (0.0, 1.0, 1.0),
-            (0.0, 0.0, 1.0),
-        ]
         self.current_wp_index = 0
-        self.patrol_enabled = True
         self.current_goal_handle = None
         self.send_goal_future = None
         self.get_result_future = None
@@ -42,6 +57,33 @@ class PatrolNode(Node):
 
         self.server_wait_timer = self.create_timer(1.0, self.try_start_patrol)
         self.get_logger().info("Patrol node đã sẵn sàng, đang chờ Nav2 Action Server...")
+
+    @staticmethod
+    def parse_bool(value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    def load_waypoints(self):
+        values = list(self.get_parameter("waypoints").value)
+        if len(values) < 3 or len(values) % 3 != 0:
+            self.get_logger().warn(
+                "Invalid waypoints parameter; using safe default waypoint at map origin."
+            )
+            return [(0.0, 0.0, 0.0)]
+
+        waypoints = []
+        for index in range(0, len(values), 3):
+            waypoints.append(
+                (float(values[index]), float(values[index + 1]), float(values[index + 2]))
+            )
+        return waypoints
+
+    @staticmethod
+    def yaw_to_quaternion(yaw):
+        return math.sin(yaw / 2.0), math.cos(yaw / 2.0)
 
     def patrol_control_callback(self, msg):
         if msg.data == self.patrol_enabled:
@@ -86,11 +128,13 @@ class PatrolNode(Node):
         )
 
         goal_msg = NavigateToPose.Goal()
-        goal_msg.pose.header.frame_id = "map"
+        goal_msg.pose.header.frame_id = self.frame_id
         goal_msg.pose.header.stamp = self.get_clock().now().to_msg()
         goal_msg.pose.pose.position.x = waypoint[0]
         goal_msg.pose.pose.position.y = waypoint[1]
-        goal_msg.pose.pose.orientation.w = waypoint[2]
+        qz, qw = self.yaw_to_quaternion(waypoint[2])
+        goal_msg.pose.pose.orientation.z = qz
+        goal_msg.pose.pose.orientation.w = qw
 
         self.send_goal_future = self.nav_client.send_goal_async(goal_msg)
         self.send_goal_future.add_done_callback(self.goal_response_callback)
@@ -166,7 +210,9 @@ class PatrolNode(Node):
         if self.next_goal_timer is not None:
             return
 
-        self.next_goal_timer = self.create_timer(2.0, self.delayed_next_goal)
+        self.next_goal_timer = self.create_timer(
+            self.next_goal_delay_sec, self.delayed_next_goal
+        )
 
     def delayed_next_goal(self):
         self.cancel_next_goal_timer()
