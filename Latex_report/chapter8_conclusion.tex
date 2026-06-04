@@ -1,0 +1,40 @@
+﻿\section{KẾT LUẬN}
+
+\subsection{Kết luận chung}
+
+Báo cáo đã trình bày quá trình nghiên cứu và xây dựng hệ thống robot tự hành TurtleBot4 trong môi trường mô phỏng sử dụng ROS2, SLAM, Nav2 và YOLOv8. Dưới góc nhìn của học phần \textit{Cảm biến và Cơ cấu chấp hành}, đề tài thể hiện rõ mối liên hệ giữa hệ thống đo lường, xử lý thông tin, lập kế hoạch và thực thi chuyển động.
+
+Hệ thống đã tích hợp được các cảm biến quan trọng gồm LiDAR, camera RGB-D, odometry và TF. LiDAR đóng vai trò chính trong SLAM và navigation; camera RGB-D hỗ trợ nhận diện và định vị mục tiêu; odometry cung cấp thông tin chuyển động liên tục; TF đảm bảo quan hệ hình học giữa các frame. Các nguồn dữ liệu này được xử lý bởi ROS2 để tạo thành thông tin có ý nghĩa phục vụ điều khiển robot.
+
+Về cơ cấu chấp hành, TurtleBot4 sử dụng truyền động vi sai, nhận lệnh vận tốc từ Nav2 và thực hiện chuyển động trong môi trường. Nav2 đóng vai trò lớp điều khiển chuyển động cấp cao, chuyển goal từ Patrol Node hoặc Mission Manager thành lệnh vận tốc phù hợp. Mission Manager cho phép robot chuyển đổi hành vi từ tuần tra sang tiếp cận mục tiêu, qua đó minh họa cách cảm biến ảnh hưởng trực tiếp tới quyết định chấp hành.
+
+\subsection{Các nội dung đã hoàn thành}
+
+Trong quá trình thực hiện, báo cáo đã hoàn thành các nội dung sau:
+
+\begin{itemize}
+    \item Phân tích bối cảnh, mục tiêu và phạm vi của bài toán robot tự hành TurtleBot4.
+    \item Trình bày cơ sở lý thuyết về cảm biến, cơ cấu chấp hành, SLAM, Nav2, YOLOv8 và robot vi sai.
+    \item Thiết kế kiến trúc hệ thống ROS2 theo hướng module hóa.
+    \item Phân tích pipeline cảm biến gồm LiDAR, RGB-D camera, odometry và TF.
+    \item Phân tích cách nhận diện mục tiêu bằng YOLOv8n và định vị mục tiêu bằng ảnh depth.
+    \item Phân tích cơ cấu chấp hành vi sai và luồng điều khiển chuyển động thông qua Nav2.
+    \item Triển khai logic nhiệm vụ gồm tuần tra, phát hiện mục tiêu, tiếp cận an toàn và quay lại tuần tra.
+    \item Đánh giá kết quả mô phỏng, hạn chế và hướng phát triển.
+\end{itemize}
+
+\subsection{Ý nghĩa đối với học phần}
+
+Đề tài giúp củng cố kiến thức của học phần theo hướng ứng dụng thực tế. Thay vì khảo sát cảm biến và cơ cấu chấp hành một cách riêng lẻ, báo cáo đặt chúng trong một hệ robot hoàn chỉnh. Qua đó, có thể thấy cảm biến quyết định robot biết gì về môi trường, còn cơ cấu chấp hành quyết định robot có thể làm gì trong môi trường đó. Giữa hai lớp này là các thuật toán xử lý, lập kế hoạch và điều khiển.
+
+Cách tiếp cận này phù hợp với xu hướng robotics hiện đại, nơi kỹ sư không chỉ cần hiểu từng linh kiện mà còn phải hiểu cách tích hợp cảm biến, phần mềm và truyền động thành một hệ thống đáng tin cậy.
+
+\subsection{Hạn chế và định hướng tiếp theo}
+
+Do giới hạn thời gian và điều kiện phần cứng, đề tài mới dừng ở mức mô phỏng. Các yếu tố thực tế như nhiễu cảm biến thật, sai số lắp đặt, trượt bánh, độ trễ truyền thông, giới hạn moment động cơ và điều kiện ánh sáng chưa được đánh giá đầy đủ. Trong tương lai, cần triển khai trên TurtleBot4 thật, bổ sung đánh giá định lượng và tối ưu tham số điều hướng.
+
+Ngoài ra, Mission Manager có thể được nâng cấp thành behavior tree, hỗ trợ nhiều trạng thái phức tạp hơn như tìm kiếm mục tiêu, theo dõi mục tiêu động, tránh vùng cấm, quay về trạm sạc và phối hợp nhiều robot. Đây là các hướng mở rộng có giá trị thực tiễn cao.
+
+\subsection{Lời kết}
+
+Thông qua đề tài này, em đã hiểu sâu hơn vai trò của cảm biến và cơ cấu chấp hành trong hệ robot tự hành, đồng thời có cơ hội thực hành với ROS2, Gazebo/Ignition, SLAM, Nav2 và YOLOv8. Những kiến thức và kinh nghiệm này là nền tảng quan trọng để tiếp tục nghiên cứu các hệ robot thông minh trong tương lai.

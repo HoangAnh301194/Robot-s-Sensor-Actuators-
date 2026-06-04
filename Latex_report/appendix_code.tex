@@ -1,0 +1,101 @@
+﻿\newpage
+\section*{PHỤ LỤC A: CẤU TRÚC SOURCE CODE}
+\addcontentsline{toc}{section}{PHỤ LỤC A: CẤU TRÚC SOURCE CODE}
+
+\begin{lstlisting}
+Robots_Sensor_Actuators/
+|-- tb4_bringup/
+|   |-- launch/sim_demo.launch.py
+|   |-- launch/slam_demo.launch.py
+|   |-- config/slam_toolbox_tb4.yaml
+|   |-- rviz/tb4_debug.rviz
+|   `-- tb4_bringup/initial_pose_publisher.py
+|-- tb4_vision_oak/
+|   |-- launch/oak_detection.launch.py
+|   |-- config/camera_params.yaml
+|   |-- models/yolov8n.pt
+|   `-- tb4_vision_oak/detection_node.py
+|-- tb4_object_localization/
+|   |-- launch/localization.launch.py
+|   `-- scripts/localization_node.py
+|-- tb4_nav_patrol/
+|   |-- launch/nav_patrol.launch.py
+|   `-- tb4_nav_patrol/patrol_node.py
+`-- tb4_mission_manager/
+    |-- launch/mission_manager.launch.py
+    `-- tb4_mission_manager/mission_manager_node.py
+\end{lstlisting}
+
+\newpage
+\section*{PHỤ LỤC B: CÁC LỆNH CHẠY CHÍNH}
+\addcontentsline{toc}{section}{PHỤ LỤC B: CÁC LỆNH CHẠY CHÍNH}
+
+\subsection*{Build workspace}
+\begin{lstlisting}
+cd ~/tb4_project_ab
+source /opt/ros/humble/setup.bash
+colcon build --symlink-install
+source install/setup.bash
+\end{lstlisting}
+
+\subsection*{Launch simulator}
+\begin{lstlisting}
+cd ~/tb4_project_ab
+export ROS_DOMAIN_ID=7
+export RMW_FASTRTPS_USE_SHM=0
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch turtlebot4_ignition_bringup turtlebot4_ignition.launch.py \
+  model:=lite world:=warehouse x:=2.0 y:=0.0 z:=0.01 yaw:=0.0
+\end{lstlisting}
+
+\subsection*{Chạy full mission}
+\begin{lstlisting}
+cd ~/tb4_project_ab
+export ROS_DOMAIN_ID=7
+export RMW_FASTRTPS_USE_SHM=0
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch tb4_bringup sim_demo.launch.py use_rviz:=true
+\end{lstlisting}
+
+\subsection*{Kiểm tra topic}
+\begin{lstlisting}
+ros2 topic echo /scan --once
+ros2 topic echo /odom --once
+ros2 topic echo /clock --once
+ros2 topic echo /vision/detected_objects --once
+ros2 topic echo /target_object_pose_map --once
+ros2 topic echo /target_object_marker --once
+\end{lstlisting}
+
+\newpage
+\section*{PHỤ LỤC C: MỘT SỐ LỖI VÀ CÁCH KHẮC PHỤC}
+\addcontentsline{toc}{section}{PHỤ LỤC C: MỘT SỐ LỖI VÀ CÁCH KHẮC PHỤC}
+
+\subsection*{Lỗi ROS daemon hoặc session cũ}
+\begin{itemize}
+    \item Dừng ROS daemon bằng \texttt{ros2 daemon stop}.
+    \item Kill các process ROS2/Gazebo cũ nếu còn chạy.
+    \item Xóa cache shared memory nếu cần.
+    \item Source lại môi trường ROS2 và workspace.
+\end{itemize}
+
+\subsection*{Lỗi \texttt{/scan} bất thường}
+\begin{itemize}
+    \item Kiểm tra topic \texttt{/scan} có dữ liệu hợp lệ hay không.
+    \item Kiểm tra frame và vị trí lắp đặt \texttt{rplidar\_link}.
+    \item Kiểm tra collision giữa LiDAR và robot model.
+    \item Quan sát LaserScan trong RViz để xác định lỗi hình học.
+\end{itemize}
+
+\subsection*{Lỗi không thấy marker mục tiêu}
+\begin{itemize}
+    \item Kiểm tra \texttt{/vision/detected\_objects} có detection hay không.
+    \item Kiểm tra ảnh depth và camera info có publish hay không.
+    \item Kiểm tra \texttt{/target\_object\_pose\_map} có dữ liệu hay không.
+    \item Trong RViz thêm display Marker với topic \texttt{/target\_object\_marker}.
+\end{itemize}
+

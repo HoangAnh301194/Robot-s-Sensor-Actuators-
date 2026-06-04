@@ -1,0 +1,77 @@
+﻿\section{THIẾT KẾ KIẾN TRÚC HỆ THỐNG}
+
+\subsection{Tổng quan kiến trúc}
+
+Hệ thống được thiết kế theo kiến trúc module trên ROS2, trong đó mỗi chức năng chính được đóng gói thành một package riêng. Cách tổ chức này giúp hệ thống dễ mở rộng, dễ kiểm thử và phù hợp với tư duy thiết kế robot hiện đại. Các package chính gồm: \texttt{tb4\_bringup}, \texttt{tb4\_vision\_oak}, \texttt{tb4\_object\_localization}, \texttt{tb4\_nav\_patrol} và \texttt{tb4\_mission\_manager}.
+
+\begin{table}[H]
+\centering
+\caption{Các package chính của hệ thống}
+\begin{tabularx}{\textwidth}{|p{4cm}|Y|}
+\hline
+\textbf{Package} & \textbf{Chức năng} \\
+\hline
+\texttt{tb4\_bringup} & Khởi chạy Nav2, localization, RViz, perception, mission manager và cấu hình tổng thể. \\
+\hline
+\texttt{tb4\_vision\_oak} & Nhận ảnh RGB từ camera OAK-D, chạy YOLOv8n và publish detection 2D. \\
+\hline
+\texttt{tb4\_object\_localization} & Kết hợp detection 2D, ảnh depth và camera intrinsic để ước lượng vị trí mục tiêu 3D. \\
+\hline
+\texttt{tb4\_nav\_patrol} & Gửi các waypoint tuần tra cho Nav2 qua action \texttt{NavigateToPose}. \\
+\hline
+\texttt{tb4\_mission\_manager} & Điều phối hành vi tuần tra, phát hiện mục tiêu, tiếp cận an toàn và quay lại tuần tra. \\
+\hline
+\end{tabularx}
+\end{table}
+
+\subsection{Luồng dữ liệu chính}
+
+Luồng dữ liệu trong hệ thống có thể mô tả như sau:
+
+\begin{enumerate}
+    \item Gazebo/Ignition mô phỏng robot, môi trường, LiDAR, camera RGB-D và odometry.
+    \item LiDAR publish dữ liệu \texttt{/scan}; camera publish ảnh RGB, ảnh depth và \texttt{/camera\_info}.
+    \item SLAM/localization và Nav2 sử dụng bản đồ, TF, odometry và scan để định vị và điều hướng.
+    \item YOLOv8 nhận ảnh RGB và publish \texttt{/vision/detected\_objects}.
+    \item Object Localization dùng bbox, depth và camera intrinsic để publish \texttt{/target\_object\_pose\_map} và marker RViz.
+    \item Mission Manager nhận vị trí mục tiêu, tạm dừng Patrol Node và gửi goal tiếp cận an toàn cho Nav2.
+    \item Nav2 tạo lệnh vận tốc cho robot, hệ chấp hành vi sai thực thi chuyển động.
+\end{enumerate}
+
+\subsection{Sơ đồ khối hệ thống}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.3cm, every node/.style={draw, rounded corners, align=center, font=\small, minimum height=0.85cm}, >=Latex]
+\node (sim) {Gazebo/Ignition\\TurtleBot4 Lite};
+\node (sens) [right=of sim] {LiDAR, RGB-D\\Odometry, TF};
+\node (slam) [right=of sens] {SLAM/Localization\\Map + Pose};
+\node (nav) [right=of slam] {Nav2\\Planner + Controller};
+\node (act) [below=of nav] {Differential Drive\\Actuators};
+\node (vision) [below=of sens] {YOLOv8\\2D Detection};
+\node (loc) [right=of vision] {Object Localization\\3D Target Pose};
+\node (mission) [right=of loc] {Mission Manager\\Patrol/Approach};
+\draw[->] (sim) -- (sens);
+\draw[->] (sens) -- (slam);
+\draw[->] (slam) -- (nav);
+\draw[->] (nav) -- (act);
+\draw[->] (act) -| (sim);
+\draw[->] (sens) -- (vision);
+\draw[->] (vision) -- (loc);
+\draw[->] (loc) -- (mission);
+\draw[->] (mission) -- (nav);
+\end{tikzpicture}
+\caption{Kiến trúc tổng quát của hệ thống robot tự hành TurtleBot4}
+\end{figure}
+
+\subsection{Môi trường mô phỏng}
+
+Môi trường mô phỏng chính là warehouse trong Gazebo/Ignition. Robot được spawn dưới dạng TurtleBot4 Lite với các tham số vị trí ban đầu \(x=2.0\), \(y=0.0\), \(z=0.01\), \(yaw=0.0\). Mô phỏng cho phép đánh giá luồng dữ liệu cảm biến, thuật toán SLAM, Nav2 và mission logic trước khi triển khai trên phần cứng thật.
+
+\subsection{Cấu hình launch tổng hợp}
+
+File \texttt{sim\_demo.launch.py} trong package \texttt{tb4\_bringup} đóng vai trò khởi chạy toàn hệ thống. Launch file này bao gồm localization, Nav2, node phát initial pose, patrol, YOLO detection, object localization, mission manager và RViz nếu được yêu cầu. Việc gom các thành phần vào một launch file giúp giảm lỗi thao tác và đảm bảo thứ tự khởi động hợp lý.
+
+\subsection{Kết luận chương}
+
+Chương này đã trình bày kiến trúc tổng thể của hệ thống TurtleBot4. Cách tổ chức theo module cho phép tách biệt rõ ràng giữa cảm biến, perception, localization, navigation và mission management. Đây là cơ sở để phân tích chi tiết hệ cảm biến và cơ cấu chấp hành ở các chương tiếp theo.

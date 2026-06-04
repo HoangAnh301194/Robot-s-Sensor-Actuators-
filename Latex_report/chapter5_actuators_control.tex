@@ -1,0 +1,83 @@
+﻿\section{CƠ CẤU CHẤP HÀNH VÀ ĐIỀU KHIỂN CHUYỂN ĐỘNG}
+
+\subsection{Cấu trúc chấp hành của TurtleBot4}
+
+TurtleBot4 thuộc nhóm robot di động mặt đất sử dụng truyền động vi sai. Hai bánh chủ động được điều khiển độc lập, kết hợp với bánh tự do để giữ cân bằng cơ học. Cấu trúc này đơn giản nhưng hiệu quả cho robot trong nhà, đặc biệt trong các nhiệm vụ tuần tra, điều hướng hành lang và tiếp cận mục tiêu.
+
+Cơ cấu chấp hành của TurtleBot4 nhận lệnh vận tốc ở mức cao dưới dạng \texttt{geometry\_msgs/Twist}, thường là topic \texttt{/cmd\_vel}. Lệnh gồm vận tốc tuyến tính theo trục \(x\) và vận tốc góc quanh trục \(z\). Bộ điều khiển cấp thấp chuyển đổi lệnh này thành vận tốc từng bánh.
+
+\subsection{Mô hình động học robot vi sai}
+
+Với robot vi sai, giả sử robot chuyển động trong mặt phẳng, trạng thái robot được mô tả bởi \((x,y,\theta)\). Phương trình động học là:
+
+\[
+\dot{x} = v\cos\theta, \qquad
+\dot{y} = v\sin\theta, \qquad
+\dot{\theta} = \omega
+\]
+
+Trong đó \(v\) là vận tốc tuyến tính, \(\omega\) là vận tốc góc. Quan hệ giữa vận tốc robot và vận tốc bánh xe là:
+
+\[
+v = \frac{r}{2}(\omega_r + \omega_l), \qquad
+\omega = \frac{r}{L}(\omega_r - \omega_l)
+\]
+
+Suy ra:
+
+\[
+\omega_r = \frac{v + \frac{L}{2}\omega}{r}, \qquad
+\omega_l = \frac{v - \frac{L}{2}\omega}{r}
+\]
+
+Mô hình này cho thấy mỗi quyết định điều hướng cuối cùng đều được thực thi thông qua hai đại lượng vật lý là vận tốc bánh trái và bánh phải.
+
+\subsection{Nav2 như lớp điều khiển chuyển động cấp cao}
+
+Nav2 đóng vai trò bộ điều khiển chuyển động cấp cao. Khi nhận goal từ Patrol Node hoặc Mission Manager, Nav2 thực hiện các bước: kiểm tra bản đồ, lập đường đi toàn cục, tạo lệnh điều khiển cục bộ, tránh vật cản và gửi lệnh vận tốc cho robot. Trong hệ thống này, các node điều phối không điều khiển trực tiếp động cơ mà gửi mục tiêu vị trí cho Nav2 qua action \texttt{NavigateToPose}.
+
+Cách thiết kế này có ưu điểm là tách biệt rõ nhiệm vụ và điều khiển. Mission Manager quyết định robot cần làm gì, còn Nav2 quyết định robot di chuyển như thế nào để đạt mục tiêu đó một cách an toàn.
+
+\subsection{Patrol Node}
+
+Patrol Node tạo hành vi tuần tra bằng cách gửi tuần tự các waypoint trong frame \texttt{map}. Danh sách waypoint hiện tại gồm bốn điểm tạo thành một chu trình đơn giản:
+
+\[
+(1.0,0.0), \quad (1.0,1.0), \quad (0.0,1.0), \quad (0.0,0.0)
+\]
+
+Node sử dụng action client \texttt{NavigateToPose}. Khi Nav2 hoàn thành một waypoint, node tăng chỉ số và gửi waypoint tiếp theo. Khi nhận tín hiệu \texttt{/mission\_manager/patrol\_enabled = false}, Patrol Node hủy goal hiện tại để nhường quyền điều khiển cho Mission Manager.
+
+\subsection{Mission Manager và điều khiển hành vi}
+
+Mission Manager là lớp điều phối nhiệm vụ. Khi robot đang tuần tra và phát hiện mục tiêu ở khoảng cách lớn hơn \texttt{safe\_distance}, node tạm dừng tuần tra, biến đổi vị trí mục tiêu sang frame \texttt{map}, tính điểm tiếp cận an toàn và gửi goal mới cho Nav2.
+
+Điểm tiếp cận không trùng với vị trí mục tiêu mà nằm cách mục tiêu một khoảng an toàn. Nếu vector từ robot tới mục tiêu là \((d_x,d_y)\), khoảng cách phẳng là:
+
+\[
+d = \sqrt{d_x^2 + d_y^2}
+\]
+
+Với khoảng cách an toàn \(d_s\), điểm goal được tính theo tỷ lệ:
+
+\[
+\alpha = \frac{d-d_s}{d}
+\]
+
+\[
+x_g = x_r + \alpha d_x, \qquad y_g = y_r + \alpha d_y
+\]
+
+Cách tính này giúp robot tiếp cận mục tiêu mà không va chạm hoặc đứng quá sát đối tượng.
+
+\subsection{Quan hệ giữa cảm biến và chấp hành}
+
+Điểm cốt lõi của hệ thống là liên hệ giữa cảm biến và cơ cấu chấp hành. Cảm biến phát hiện mục tiêu; thuật toán định vị chuyển mục tiêu thành tọa độ; Mission Manager biến tọa độ thành goal; Nav2 biến goal thành lệnh vận tốc; cơ cấu vi sai biến lệnh vận tốc thành chuyển động bánh xe. Chuỗi này thể hiện rõ bản chất của một hệ robot tự hành:
+
+\[
+\text{Detection} \rightarrow \text{3D Localization} \rightarrow \text{Goal} \rightarrow \text{Velocity Command} \rightarrow \text{Wheel Motion}
+\]
+
+\subsection{Kết luận chương}
+
+Chương này đã trình bày cơ cấu chấp hành của TurtleBot4 và cách hệ thống điều khiển chuyển động thông qua Nav2, Patrol Node và Mission Manager. Phân tích cho thấy cơ cấu chấp hành không hoạt động độc lập mà luôn phụ thuộc vào dữ liệu cảm biến và quyết định điều hướng cấp cao.

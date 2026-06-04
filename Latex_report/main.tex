@@ -1,0 +1,79 @@
+﻿\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T5]{fontenc}
+\usepackage[fontsize=13pt]{scrextend}
+\usepackage[paperheight=29.7cm,paperwidth=21cm,right=2cm,left=3cm,top=2cm,bottom=2.5cm,twoside]{geometry}
+\usepackage{mathptmx}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{graphicx,float,tikz}
+\usetikzlibrary{calc,arrows.meta,positioning}
+\usepackage{multicol,multirow,tabularx,longtable,booktabs,array}
+\usepackage[table]{xcolor}
+\usepackage{listings}
+\usepackage[font=bf]{caption}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{indentfirst}
+\usepackage[ddmmyyyy]{datetime}
+\usepackage[unicode]{hyperref}
+
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{codegray}{RGB}{90,90,90}
+\definecolor{codeblue}{RGB}{0,80,160}
+\definecolor{codegreen}{RGB}{0,130,70}
+\definecolor{codered}{RGB}{170,60,60}
+\lstdefinestyle{codestyle}{
+    backgroundcolor=\color{codebg}, basicstyle=\ttfamily\small,
+    keywordstyle=\color{codeblue}\bfseries, commentstyle=\color{codegreen}\itshape,
+    stringstyle=\color{codered}, numberstyle=\tiny\color{codegray}, numbers=left,
+    stepnumber=1, numbersep=8pt, frame=single, rulecolor=\color{black!25},
+    breaklines=true, breakatwhitespace=true, tabsize=4, showstringspaces=false,
+    captionpos=b, xleftmargin=1.5em, framexleftmargin=1.2em
+}
+\lstset{style=codestyle}
+
+\setcounter{secnumdepth}{4}
+\titleformat{\section}[hang]{\normalfont\fontsize{16pt}{19.2pt}\selectfont\bfseries\centering}{\thesection.}{1em}{}
+\titlespacing*{\section}{0pt}{3.5ex plus 1ex minus .2ex}{2.3ex plus .2ex}
+\titleformat*{\subsection}{\fontsize{14pt}{16.8pt}\selectfont\bfseries}
+\titleformat*{\subsubsection}{\fontsize{13pt}{15.6pt}\selectfont\bfseries\itshape}
+\renewcommand{\baselinestretch}{1.2}
+\setlength{\parskip}{6pt}
+\setlength{\parindent}{1cm}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\renewcommand{\figurename}{\fontsize{12pt}{0pt}\selectfont\bfseries Hình}
+\renewcommand{\tablename}{\fontsize{12pt}{0pt}\selectfont\bfseries Bảng}
+\renewcommand{\thefigure}{\thesection.\arabic{figure}}
+\renewcommand{\thetable}{\thesection.\arabic{table}}
+\renewcommand{\theequation}{\thesection.\arabic{equation}}
+\numberwithin{equation}{section}
+\numberwithin{figure}{section}
+\numberwithin{table}{section}
+\captionsetup{labelsep=space}
+\renewcommand{\contentsname}{MỤC LỤC}
+
+\begin{document}
+\renewcommand{\labelitemi}{--}
+\renewcommand{\labelitemii}{-}
+\input{cover}
+
+\pagenumbering{roman}
+\setcounter{page}{1}
+\input{preface}
+\newpage
+\tableofcontents
+\newpage
+
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\input{chapter1_overview}
+\input{chapter2_theory}
+\input{chapter3_system_design}
+\input{chapter4_sensors}
+\input{chapter5_actuators_control}
+\input{chapter6_mission}
+\input{chapter7_results}
+\input{chapter8_conclusion}
+\input{appendix_code}
+\input{end}
+\end{document}

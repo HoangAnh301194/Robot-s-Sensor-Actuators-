@@ -1,0 +1,67 @@
+﻿\section{KẾT QUẢ MÔ PHỎNG VÀ ĐÁNH GIÁ}
+
+\subsection{Kết quả đạt được}
+
+Hệ thống đã được xây dựng theo kiến trúc ROS2 module hóa và có thể khởi chạy luồng nhiệm vụ tự hành trong môi trường mô phỏng. Các kết quả chính gồm:
+
+\begin{itemize}
+    \item TurtleBot4 Lite spawn thành công trong môi trường warehouse của Gazebo/Ignition.
+    \item LiDAR, camera RGB-D, odometry và TF hoạt động, cung cấp dữ liệu cho các node xử lý.
+    \item SLAM Toolbox có thể sử dụng dữ liệu LiDAR để xây dựng bản đồ occupancy grid.
+    \item Nav2 có thể nhận goal và điều hướng robot theo waypoint.
+    \item YOLOv8n được tích hợp để phát hiện mục tiêu từ ảnh RGB.
+    \item Object Localization tính được vị trí mục tiêu tương đối từ detection và depth.
+    \item Marker mục tiêu có thể hiển thị trên RViz.
+    \item Mission Manager điều phối được quá trình tuần tra, phát hiện và tiếp cận mục tiêu.
+\end{itemize}
+
+\subsection{Đánh giá hệ cảm biến}
+
+Hệ cảm biến đáp ứng được yêu cầu cơ bản của bài toán. LiDAR cung cấp dữ liệu đủ cho SLAM và costmap. Camera RGB-D hỗ trợ nhận diện và định vị mục tiêu. Odometry và TF cung cấp liên kết trạng thái cần thiết cho navigation. Tuy nhiên, hệ thống phụ thuộc mạnh vào chất lượng TF và đồng bộ thời gian. Nếu transform giữa camera và map không sẵn sàng, Mission Manager không thể chuyển mục tiêu sang tọa độ toàn cục.
+
+Một điểm cải thiện đáng chú ý là xử lý depth. Việc dùng median trong cửa sổ quanh tâm bbox giúp tăng độ ổn định so với lấy một pixel đơn lẻ. Đây là lựa chọn hợp lý vì ảnh depth thường có điểm mất dữ liệu hoặc nhiễu cục bộ tại biên vật thể.
+
+\subsection{Đánh giá cơ cấu chấp hành và điều khiển}
+
+Về lớp chấp hành, robot vi sai phù hợp với môi trường trong nhà và nhiệm vụ tuần tra. Nav2 giúp giảm đáng kể độ phức tạp khi điều khiển vì hệ thống không cần tự viết bộ điều khiển local planner từ đầu. Patrol Node và Mission Manager chỉ cần gửi goal, còn Nav2 xử lý lập đường, tránh vật cản và tạo lệnh vận tốc.
+
+Tuy nhiên, hệ thống hiện chưa tối ưu sâu các tham số planner, controller và costmap. Với môi trường phức tạp hoặc nhiều vật cản động, cần tinh chỉnh thêm để tăng độ mượt, giảm dao động và tránh kẹt cục bộ.
+
+\subsection{Đánh giá kiến trúc phần mềm}
+
+Kiến trúc module hóa là điểm mạnh của đề tài. Mỗi package có trách nhiệm rõ ràng, giúp dễ debug và mở rộng. Ví dụ, có thể thay YOLOv8n bằng một mô hình custom mà không cần thay đổi Nav2; hoặc có thể thay Patrol Node bằng behavior tree mà không ảnh hưởng tới object localization.
+
+Cơ chế publish/subscribe và action của ROS2 phù hợp với hệ thống phân tán. Topic dùng cho dữ liệu liên tục như ảnh, scan, pose; action dùng cho nhiệm vụ kéo dài như navigation goal; parameter dùng cho cấu hình như confidence threshold và safe distance.
+
+\subsection{Hạn chế}
+
+Bên cạnh các kết quả đạt được, hệ thống vẫn còn một số hạn chế:
+
+\begin{itemize}
+    \item Chưa triển khai và kiểm thử trên TurtleBot4 thật.
+    \item Waypoint tuần tra còn hardcode trong source code.
+    \item Mission Manager mới ở dạng logic trạng thái đơn giản, chưa phải behavior tree hoặc finite state machine đầy đủ.
+    \item Chưa tối ưu toàn diện tham số Nav2, costmap, planner và controller.
+    \item Chưa có cơ chế tracking nhiều mục tiêu hoặc mục tiêu chuyển động.
+    \item Pose mục tiêu phụ thuộc vào depth tại bbox, dễ bị ảnh hưởng khi vật thể bị che khuất hoặc depth không ổn định.
+    \item Robot chưa tối ưu hướng quay mặt về phía mục tiêu khi tiếp cận.
+\end{itemize}
+
+\subsection{Hướng phát triển}
+
+Các hướng phát triển tiếp theo gồm:
+
+\begin{itemize}
+    \item Triển khai trên robot TurtleBot4 thật và đánh giá sai số cảm biến thực tế.
+    \item Đưa waypoint tuần tra ra file YAML để cấu hình linh hoạt.
+    \item Xây dựng Mission Manager theo finite state machine hoặc behavior tree.
+    \item Tối ưu Nav2 costmap, planner và controller cho từng môi trường.
+    \item Thêm multi-object tracking và lọc vị trí mục tiêu theo thời gian.
+    \item Huấn luyện YOLO custom cho các đối tượng chuyên biệt.
+    \item Tích hợp semantic map để robot hiểu thêm ý nghĩa của môi trường.
+    \item Bổ sung logging và tiêu chí định lượng như sai số định vị, thời gian tiếp cận, tỷ lệ phát hiện đúng và độ ổn định navigation.
+\end{itemize}
+
+\subsection{Kết luận chương}
+
+Kết quả mô phỏng cho thấy hệ thống đã đáp ứng mục tiêu đề tài ở mức tích hợp chức năng. Robot có thể mô phỏng, thu nhận dữ liệu cảm biến, lập bản đồ, điều hướng, nhận diện mục tiêu và thực hiện hành vi tiếp cận. Các hạn chế hiện tại chủ yếu nằm ở mức tối ưu, đánh giá định lượng và triển khai thực nghiệm trên phần cứng thật.

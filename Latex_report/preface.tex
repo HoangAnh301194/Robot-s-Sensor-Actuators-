@@ -1,0 +1,33 @@
+﻿\phantomsection
+\section*{LỜI CẢM ƠN}
+\addcontentsline{toc}{section}{LỜI CẢM ƠN}
+
+Em xin gửi lời cảm ơn chân thành đến Thầy \textbf{TS. Phạm Hoàng Anh}, giảng viên hướng dẫn học phần \textit{Cảm biến và Cơ cấu chấp hành}, đã tận tình giảng dạy, định hướng và truyền đạt các kiến thức nền tảng về cảm biến, cơ cấu chấp hành, hệ thống đo lường, điều khiển chuyển động và ứng dụng của chúng trong các hệ thống robot hiện đại.
+
+Học phần đã giúp em hiểu rõ hơn vai trò của cảm biến trong việc thu nhận thông tin từ môi trường, vai trò của cơ cấu chấp hành trong biến đổi tín hiệu điều khiển thành chuyển động vật lý, cũng như mối liên hệ chặt chẽ giữa nhận thức, định vị, lập kế hoạch và điều khiển trong một hệ robot tự hành. Những kiến thức này là cơ sở quan trọng để em triển khai đề tài nghiên cứu hệ thống robot tự hành TurtleBot4 trong môi trường mô phỏng sử dụng ROS2, SLAM, Nav2 và YOLOv8.
+
+Em cũng xin cảm ơn Khoa Kỹ thuật Điện tử 1, Học viện Công nghệ Bưu chính Viễn thông đã tạo điều kiện học tập, nghiên cứu và thực hành trong quá trình thực hiện báo cáo. Mặc dù đã cố gắng hoàn thiện báo cáo một cách nghiêm túc, bài làm vẫn khó tránh khỏi thiếu sót do giới hạn về thời gian và kinh nghiệm triển khai thực nghiệm. Em kính mong nhận được góp ý của thầy để tiếp tục hoàn thiện kiến thức và năng lực nghiên cứu trong lĩnh vực robotics.
+
+\vspace{1cm}
+\begin{flushright}
+    \setlength{\rightskip}{1cm}
+    \textit{Hà Nội, ngày 04 tháng 06 năm 2026}\\
+    \vspace{0.5cm}
+    \textit{Sinh viên thực hiện}\\
+    \vspace{2cm}
+    \textbf{Nguyễn Hữu Hoàng Anh}
+\end{flushright}
+\newpage
+
+\phantomsection
+\section*{LỜI MỞ ĐẦU}
+\addcontentsline{toc}{section}{LỜI MỞ ĐẦU}
+
+Robot tự hành đang trở thành một hướng phát triển quan trọng của kỹ thuật robot hiện đại, đặc biệt trong các bài toán kho vận thông minh, giám sát, tuần tra, dịch vụ và hỗ trợ con người. Một robot tự hành không chỉ cần cơ cấu chuyển động ổn định mà còn cần hệ cảm biến đủ tin cậy để nhận biết môi trường, định vị bản thân, phát hiện đối tượng và ra quyết định hành động. Vì vậy, việc nghiên cứu robot tự hành là một ví dụ điển hình cho sự kết hợp giữa cảm biến, cơ cấu chấp hành và thuật toán điều khiển.
+
+Báo cáo này trình bày quá trình xây dựng hệ thống robot tự hành TurtleBot4 trong môi trường mô phỏng. Hệ thống sử dụng ROS2 làm nền tảng tích hợp phần mềm, Gazebo/Ignition làm môi trường mô phỏng, LiDAR và camera RGB-D làm nguồn dữ liệu cảm biến, SLAM Toolbox để xây dựng bản đồ, Nav2 để điều hướng, YOLOv8 để nhận diện mục tiêu và một Mission Manager để điều phối hành vi tuần tra, phát hiện và tiếp cận mục tiêu.
+
+Dưới góc nhìn của học phần \textit{Cảm biến và Cơ cấu chấp hành}, trọng tâm báo cáo không chỉ là phần mềm robot mà còn là phân tích mối quan hệ hệ thống: cảm biến cung cấp dữ liệu đo, thuật toán xử lý biến dữ liệu đo thành thông tin trạng thái, bộ lập kế hoạch tạo lệnh chuyển động, và cơ cấu chấp hành của robot thực hiện lệnh để tạo chuyển động trong môi trường. Cách tiếp cận này giúp đánh giá hệ robot như một hệ cơ điện tử hoàn chỉnh thay vì chỉ là một tập hợp các module rời rạc.
+
+Nội dung báo cáo gồm tám chương: tổng quan đề tài; cơ sở lý thuyết; thiết kế kiến trúc hệ thống; hệ thống cảm biến; cơ cấu chấp hành và điều khiển chuyển động; triển khai nhiệm vụ tự hành; kết quả mô phỏng và đánh giá; kết luận và hướng phát triển.
+\newpage

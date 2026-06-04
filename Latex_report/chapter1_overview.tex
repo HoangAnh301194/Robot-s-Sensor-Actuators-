@@ -1,0 +1,45 @@
+﻿\section{TỔNG QUAN ĐỀ TÀI}
+
+\subsection{Bối cảnh nghiên cứu}
+
+Trong những năm gần đây, robot tự hành đã được ứng dụng rộng rãi trong các lĩnh vực như kho vận, sản xuất thông minh, giám sát an ninh, chăm sóc y tế, dịch vụ trong nhà và nghiên cứu giáo dục. Điểm khác biệt cơ bản giữa robot tự hành và các cơ cấu máy tự động truyền thống nằm ở khả năng nhận thức môi trường, tự định vị, lập kế hoạch đường đi và điều khiển chuyển động một cách thích nghi.
+
+Một robot di động hiện đại thường bao gồm ba lớp chức năng chính. Lớp thứ nhất là lớp cảm biến, có nhiệm vụ thu nhận dữ liệu từ môi trường và từ trạng thái nội tại của robot. Lớp thứ hai là lớp xử lý và ra quyết định, bao gồm định vị, lập bản đồ, nhận diện vật thể, lập kế hoạch và quản lý nhiệm vụ. Lớp thứ ba là lớp chấp hành, chuyển đổi lệnh điều khiển thành chuyển động thực tế thông qua động cơ, bánh xe và hệ truyền động.
+
+Trong học phần \textit{Cảm biến và Cơ cấu chấp hành}, việc nghiên cứu một hệ robot tự hành có ý nghĩa thực tiễn cao vì hệ thống này thể hiện đầy đủ vòng kín cảm biến--xử lý--điều khiển--chấp hành. Dữ liệu từ LiDAR, camera, odometry và TF không chỉ được quan sát độc lập mà còn được kết hợp để phục vụ bài toán SLAM, navigation và tiếp cận mục tiêu.
+
+\subsection{Lý do chọn đề tài}
+
+Đề tài lựa chọn TurtleBot4 vì đây là nền tảng robot di động phổ biến trong nghiên cứu và đào tạo robotics. TurtleBot4 có cấu trúc cơ khí dạng robot vi sai, tích hợp các cảm biến quan trọng như LiDAR, camera RGB-D, encoder/odometry và hỗ trợ tốt hệ sinh thái ROS2. Điều này cho phép người học khảo sát tương đối đầy đủ mối quan hệ giữa cảm biến và cơ cấu chấp hành trong một hệ robot di động.
+
+Việc triển khai trong môi trường mô phỏng Gazebo/Ignition giúp giảm chi phí phần cứng, giảm rủi ro khi thử nghiệm, đồng thời cho phép kiểm tra các thuật toán trước khi triển khai trên robot thật. Bên cạnh đó, ROS2 Humble, SLAM Toolbox, Nav2 và YOLOv8 là các công cụ hiện đại, có tính ứng dụng cao trong thực tế công nghiệp và nghiên cứu.
+
+\subsection{Mục tiêu của đề tài}
+
+Mục tiêu tổng quát của đề tài là xây dựng và phân tích một hệ thống robot tự hành TurtleBot4 có khả năng tuần tra, nhận diện và tiếp cận mục tiêu trong môi trường mô phỏng. Các mục tiêu cụ thể gồm:
+
+\begin{itemize}
+    \item Thiết lập môi trường mô phỏng TurtleBot4 Lite trong Gazebo/Ignition.
+    \item Tích hợp các nguồn dữ liệu cảm biến: LiDAR, camera RGB-D, odometry và TF.
+    \item Sử dụng SLAM Toolbox để xây dựng bản đồ môi trường.
+    \item Sử dụng Nav2 để điều hướng robot trên bản đồ đã có.
+    \item Tích hợp YOLOv8n để nhận diện đối tượng mục tiêu từ ảnh RGB.
+    \item Ước lượng vị trí mục tiêu trong không gian 3D dựa trên ảnh depth và thông số nội tại camera.
+    \item Xây dựng Mission Manager để điều phối hành vi tuần tra, tạm dừng tuần tra, tiếp cận mục tiêu và quay lại nhiệm vụ ban đầu.
+\end{itemize}
+
+\subsection{Phạm vi nghiên cứu}
+
+Đề tài tập trung vào mô phỏng và tích hợp hệ thống. Robot sử dụng là TurtleBot4 Lite trong môi trường warehouse của Gazebo/Ignition. Phần mềm triển khai trên ROS2 Humble. Nhận diện đối tượng dùng YOLOv8n pretrained trên COCO dataset, trong đó lớp \textit{person} được ưu tiên như mục tiêu chính. Hệ thống chưa triển khai trên phần cứng TurtleBot4 thật, chưa tối ưu sâu tham số Nav2 và chưa xử lý tracking nhiều mục tiêu động.
+
+\subsection{Đóng góp chính của báo cáo}
+
+Báo cáo không chỉ mô tả cách chạy một hệ thống ROS2 mà còn phân tích vai trò kỹ thuật của từng thành phần dưới góc nhìn cảm biến và cơ cấu chấp hành. Các đóng góp chính gồm:
+
+\begin{itemize}
+    \item Đề xuất kiến trúc module cho hệ robot tự hành TurtleBot4.
+    \item Phân tích chuỗi xử lý cảm biến từ LiDAR/camera đến bản đồ, pose và marker mục tiêu.
+    \item Phân tích cơ cấu chấp hành vi sai và cách Nav2 tạo lệnh vận tốc cho robot.
+    \item Xây dựng luồng nhiệm vụ tự hành kết hợp patrol, perception, localization và navigation.
+    \item Đánh giá các kết quả đạt được, hạn chế và hướng phát triển phù hợp cho robot thật.
+\end{itemize}

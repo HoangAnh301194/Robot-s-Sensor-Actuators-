@@ -1,0 +1,83 @@
+﻿\section{TRIỂN KHAI NHIỆM VỤ TỰ HÀNH}
+
+\subsection{Mục tiêu nhiệm vụ}
+
+Nhiệm vụ tự hành trong đề tài được thiết kế theo kịch bản: robot tuần tra trong môi trường mô phỏng, quan sát bằng camera RGB-D, phát hiện mục tiêu bằng YOLOv8, định vị mục tiêu trong không gian 3D, tạm dừng tuần tra, tiếp cận mục tiêu ở khoảng cách an toàn và sau đó quay lại chế độ tuần tra.
+
+Kịch bản này phù hợp với các ứng dụng như robot giám sát kho hàng, robot tuần tra văn phòng, robot hỗ trợ tìm kiếm hoặc robot dịch vụ có khả năng phản ứng với đối tượng trong môi trường.
+
+\subsection{Quy trình khởi động hệ thống}
+
+Hệ thống được khởi động theo hai bước chính. Trước hết, mô phỏng TurtleBot4 được launch trong Gazebo/Ignition. Sau đó, launch tổng hợp \texttt{sim\_demo.launch.py} được sử dụng để chạy Nav2, localization, vision, object localization, patrol và mission manager.
+
+\begin{lstlisting}[caption={Lệnh khởi động mô phỏng TurtleBot4}]
+cd ~/tb4_project_ab
+export ROS_DOMAIN_ID=7
+export RMW_FASTRTPS_USE_SHM=0
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch turtlebot4_ignition_bringup turtlebot4_ignition.launch.py \
+  model:=lite world:=warehouse x:=2.0 y:=0.0 z:=0.01 yaw:=0.0
+\end{lstlisting}
+
+\begin{lstlisting}[caption={Lệnh chạy full mission}]
+cd ~/tb4_project_ab
+export ROS_DOMAIN_ID=7
+export RMW_FASTRTPS_USE_SHM=0
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch tb4_bringup sim_demo.launch.py use_rviz:=true
+\end{lstlisting}
+
+\subsection{SLAM và bản đồ môi trường}
+
+Trong giai đoạn mapping, SLAM Toolbox sử dụng dữ liệu \texttt{/scan}, odometry và TF để xây dựng occupancy grid map. Mỗi ô trong bản đồ biểu diễn xác suất bị chiếm bởi vật cản. Bản đồ sau khi tạo được lưu lại và dùng cho giai đoạn localization/navigation.
+
+Các tham số quan trọng trong cấu hình SLAM gồm:
+
+\begin{itemize}
+    \item \texttt{resolution: 0.05}: độ phân giải bản đồ 5 cm mỗi ô.
+    \item \texttt{min\_laser\_range: 0.2}: loại bỏ đo quá gần.
+    \item \texttt{max\_laser\_range: 12.0}: giới hạn tầm đo LiDAR.
+    \item \texttt{do\_loop\_closing: true}: cho phép phát hiện đóng vòng để giảm sai số tích lũy.
+    \item \texttt{use\_scan\_matching: true}: dùng scan matching để cải thiện ước lượng pose.
+\end{itemize}
+
+\subsection{Navigation và tuần tra}
+
+Sau khi có bản đồ, Nav2 được dùng để điều hướng. Patrol Node gửi các goal tuần tra tuần tự đến action server \texttt{navigate\_to\_pose}. Trạng thái goal được kiểm tra thông qua \texttt{GoalStatus}. Nếu goal thành công, robot chuyển sang waypoint tiếp theo; nếu bị hủy bởi Mission Manager, node dừng tuần tra tạm thời.
+
+Việc sử dụng action thay vì topic đơn giản giúp quá trình điều hướng có phản hồi rõ ràng: goal được chấp nhận hay từ chối, đang chạy hay đã hoàn thành. Đây là thiết kế phù hợp cho hệ robot tự hành vì navigation là quá trình kéo dài theo thời gian, không phải một lệnh tức thời.
+
+\subsection{Nhận diện và định vị mục tiêu}
+
+Node YOLOv8 xử lý ảnh RGB theo thời gian thực và publish detection. Node localization chọn detection phù hợp, lấy depth trung vị tại vùng tâm bbox để giảm nhiễu, sau đó tính pose tương đối. Marker được hiển thị trên RViz giúp kiểm tra trực quan vị trí mục tiêu.
+
+Quy trình này minh họa rõ sự kết hợp giữa cảm biến thị giác và cảm biến chiều sâu. Nếu chỉ dùng ảnh RGB, hệ thống chỉ biết mục tiêu nằm ở đâu trên ảnh. Nếu chỉ dùng depth, hệ thống không biết điểm nào là mục tiêu. Khi kết hợp RGB, YOLO và depth, robot có thể chuyển thông tin ngữ nghĩa thành tọa độ không gian.
+
+\subsection{Mission Manager}
+
+Mission Manager có trạng thái chính là \texttt{patrolling} và \texttt{approaching\_target}. Khi đang tuần tra, nếu nhận được vị trí mục tiêu hợp lệ và mục tiêu ở xa hơn khoảng cách an toàn, node gửi tín hiệu tạm dừng tuần tra qua \texttt{/mission\_manager/patrol\_enabled}. Sau đó, nó tính goal tiếp cận an toàn và gửi goal này đến Nav2.
+
+Sau khi goal tiếp cận kết thúc, Mission Manager đặt thời gian cooldown để tránh phản ứng lặp lại liên tục với cùng mục tiêu, rồi bật lại tuần tra. Thiết kế này tuy đơn giản nhưng đủ thể hiện mô hình điều phối hành vi cơ bản của robot tự hành.
+
+\subsection{Các topic kiểm tra quan trọng}
+
+Trong quá trình vận hành, các topic sau cần được kiểm tra để đánh giá hệ thống:
+
+\begin{lstlisting}[caption={Các lệnh kiểm tra topic chính}]
+ros2 topic echo /scan --once
+ros2 topic echo /odom --once
+ros2 topic echo /clock --once
+ros2 topic echo /vision/detected_objects --once
+ros2 topic echo /target_object_pose_map --once
+ros2 topic echo /target_object_marker --once
+\end{lstlisting}
+
+Nếu các topic trên có dữ liệu ổn định, có thể kết luận rằng pipeline cảm biến--nhận diện--định vị--điều hướng đang hoạt động đúng về mặt truyền thông ROS2.
+
+\subsection{Kết luận chương}
+
+Chương này đã trình bày cách triển khai nhiệm vụ tự hành hoàn chỉnh trên TurtleBot4, từ khởi động mô phỏng, xây dựng bản đồ, điều hướng, tuần tra, nhận diện mục tiêu đến tiếp cận mục tiêu. Đây là chương kết nối các phân tích lý thuyết về cảm biến và cơ cấu chấp hành với hệ thống thực thi cụ thể.

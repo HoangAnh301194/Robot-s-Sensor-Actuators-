@@ -1,0 +1,91 @@
+﻿\section{CƠ SỞ LÝ THUYẾT}
+
+\subsection{Robot tự hành và vòng kín cảm biến--chấp hành}
+
+Robot tự hành là hệ cơ điện tử có khả năng di chuyển trong môi trường mà không cần điều khiển trực tiếp liên tục từ con người. Để đạt được điều này, robot phải thực hiện chu trình nhận thức và hành động gồm: đo lường môi trường, ước lượng trạng thái, lập bản đồ, lập kế hoạch, phát lệnh điều khiển và thực thi chuyển động.
+
+Dưới góc nhìn hệ thống, robot tự hành có thể được biểu diễn bởi vòng kín:
+
+\[
+\text{Môi trường} \rightarrow \text{Cảm biến} \rightarrow \text{Xử lý/Ước lượng} \rightarrow \text{Điều khiển} \rightarrow \text{Cơ cấu chấp hành} \rightarrow \text{Môi trường}
+\]
+
+Trong vòng kín này, cảm biến quyết định chất lượng thông tin đầu vào, còn cơ cấu chấp hành quyết định khả năng biến quyết định điều khiển thành chuyển động thực tế. Sai số hoặc độ trễ ở một khâu đều có thể ảnh hưởng trực tiếp đến tính ổn định và độ tin cậy của toàn bộ robot.
+
+\subsection{Cảm biến trong robot di động}
+
+\subsubsection{LiDAR}
+
+LiDAR đo khoảng cách bằng cách phát tia laser và tính toán khoảng cách tới vật cản dựa trên thời gian bay hoặc nguyên lý tam giác lượng. Trong robot di động, LiDAR 2D thường tạo ra bản tin \texttt{LaserScan}, biểu diễn tập hợp khoảng cách theo các góc quét trong mặt phẳng ngang.
+
+Dữ liệu LiDAR có vai trò quan trọng trong SLAM, tránh vật cản và xây dựng costmap. Với TurtleBot4, topic \texttt{/scan} cung cấp thông tin khoảng cách xung quanh robot. Các tham số như tầm đo tối thiểu, tầm đo tối đa, độ phân giải góc và nhiễu đo ảnh hưởng trực tiếp đến chất lượng bản đồ và độ ổn định của navigation.
+
+\subsubsection{Camera RGB-D}
+
+Camera RGB-D cung cấp đồng thời ảnh màu và ảnh chiều sâu. Ảnh RGB hỗ trợ nhận diện đối tượng bằng các mô hình học sâu như YOLOv8, còn ảnh depth cho phép ước lượng khoảng cách từ camera tới đối tượng. Với mô hình camera lỗ kim, một điểm ảnh \((u,v)\) có độ sâu \(Z\) được chuyển sang tọa độ 3D trong hệ camera theo công thức:
+
+\[
+X = \frac{(u-c_x)Z}{f_x}, \qquad
+Y = \frac{(v-c_y)Z}{f_y}, \qquad
+Z = Z
+\]
+
+Trong đó \(f_x, f_y\) là tiêu cự theo pixel, \(c_x, c_y\) là tọa độ tâm ảnh. Các tham số này được lấy từ bản tin \texttt{CameraInfo}. Trong đề tài, công thức này được dùng để định vị mục tiêu 3D từ bbox YOLO và ảnh depth.
+
+\subsubsection{Odometry và encoder}
+
+Odometry là ước lượng chuyển động tương đối của robot theo thời gian, thường dựa trên encoder bánh xe và mô hình động học. Với robot vi sai, vận tốc tuyến tính \(v\) và vận tốc góc \(\omega\) được liên hệ với vận tốc bánh trái \(v_l\), bánh phải \(v_r\) bởi:
+
+\[
+v = \frac{v_r + v_l}{2}, \qquad
+\omega = \frac{v_r - v_l}{L}
+\]
+
+Trong đó \(L\) là khoảng cách giữa hai bánh chủ động. Odometry có ưu điểm là tần số cao và đáp ứng nhanh, nhưng sai số tích lũy theo thời gian do trượt bánh, sai số encoder và mô hình hóa chưa hoàn hảo. Vì vậy, odometry thường được kết hợp với LiDAR/camera trong SLAM hoặc localization.
+
+\subsection{Hệ tọa độ và TF trong ROS2}
+
+Trong robot, dữ liệu từ nhiều cảm biến chỉ có ý nghĩa khi được quy về các hệ tọa độ nhất quán. ROS2 sử dụng TF/TF2 để quản lý quan hệ hình học giữa các frame như \texttt{map}, \texttt{odom}, \texttt{base\_link}, \texttt{oakd\_link}, \texttt{rplidar\_link}.
+
+Quan hệ điển hình trong robot di động là:
+
+\[
+\texttt{map} \rightarrow \texttt{odom} \rightarrow \texttt{base\_link} \rightarrow \texttt{sensor\_frame}
+\]
+
+Frame \texttt{map} là hệ toàn cục ổn định dùng cho navigation. Frame \texttt{odom} liên tục nhưng có thể trôi. Frame \texttt{base\_link} gắn với thân robot. Các frame cảm biến gắn với vị trí lắp đặt của LiDAR và camera. Việc biến đổi chính xác giữa các frame là điều kiện bắt buộc để robot có thể dùng dữ liệu cảm biến cho lập bản đồ, hiển thị RViz và điều hướng.
+
+\subsection{SLAM}
+
+SLAM, viết tắt của \textit{Simultaneous Localization and Mapping}, là bài toán robot vừa xây dựng bản đồ môi trường vừa ước lượng vị trí của chính nó trong bản đồ đó. Với LiDAR 2D, SLAM thường dựa trên scan matching giữa các lần quét liên tiếp, kết hợp với odometry để giảm không gian tìm kiếm.
+
+Trong đề tài, SLAM Toolbox được sử dụng với các thành phần chính: scan matching, quản lý pose graph, phát hiện loop closure và tối ưu hóa đồ thị. Kết quả của SLAM là occupancy grid map và transform \texttt{map -> odom}. Bản đồ này sau đó được dùng cho Nav2 để lập kế hoạch đường đi.
+
+\subsection{Nav2 và điều hướng robot}
+
+Nav2 là framework điều hướng trong ROS2, cung cấp các chức năng localization, global planning, local control, recovery behavior và action interface. Trong hệ thống này, Mission Manager và Patrol Node gửi goal đến Nav2 thông qua action \texttt{NavigateToPose}. Nav2 sau đó tính đường đi trên bản đồ, tạo lệnh vận tốc \texttt{/cmd\_vel} và điều khiển robot di chuyển tới mục tiêu.
+
+Về bản chất, Nav2 là lớp trung gian giữa thuật toán lập kế hoạch và cơ cấu chấp hành. Nó chuyển yêu cầu vị trí đích thành chuỗi lệnh vận tốc phù hợp với giới hạn động học và môi trường xung quanh robot.
+
+\subsection{YOLOv8 trong nhận diện đối tượng}
+
+YOLOv8 là mô hình phát hiện đối tượng một giai đoạn, có khả năng dự đoán bounding box, nhãn lớp và độ tin cậy trực tiếp từ ảnh đầu vào. Trong đề tài, YOLOv8n được lựa chọn vì kích thước nhỏ, tốc độ nhanh và phù hợp với bài toán mô phỏng thời gian thực.
+
+Kết quả nhận diện được đóng gói dưới dạng \texttt{Detection2DArray}. Mỗi detection gồm tọa độ tâm bbox, kích thước bbox, class id và confidence. Khi kết hợp với ảnh depth, bbox 2D được nâng thành vị trí 3D tương đối so với camera.
+
+\subsection{Cơ cấu chấp hành robot vi sai}
+
+TurtleBot4 sử dụng cấu trúc truyền động vi sai gồm hai bánh chủ động độc lập. Cơ cấu này có ưu điểm đơn giản, dễ điều khiển, bán kính quay nhỏ và phù hợp với môi trường trong nhà. Lệnh điều khiển thường ở dạng vận tốc tuyến tính \(v\) và vận tốc góc \(\omega\). Bộ điều khiển cấp thấp chuyển đổi \((v,\omega)\) thành vận tốc góc từng bánh.
+
+Nếu bán kính bánh xe là \(r\), khoảng cách hai bánh là \(L\), vận tốc góc bánh trái/phải lần lượt là \(\omega_l, \omega_r\), ta có:
+
+\[
+\omega_r = \frac{v + \frac{L}{2}\omega}{r}, \qquad
+\omega_l = \frac{v - \frac{L}{2}\omega}{r}
+\]
+
+Mô hình này là nền tảng để hiểu cách lệnh \texttt{/cmd\_vel} từ Nav2 được chuyển thành chuyển động vật lý của robot.
+
+\subsection{Kết luận chương}
+
+Chương này đã trình bày các cơ sở lý thuyết quan trọng liên quan đến cảm biến, cơ cấu chấp hành và robot tự hành. Các nội dung gồm LiDAR, camera RGB-D, odometry, TF, SLAM, Nav2, YOLOv8 và mô hình truyền động vi sai. Đây là nền tảng để phân tích kiến trúc và quá trình triển khai hệ thống TurtleBot4 trong các chương tiếp theo.

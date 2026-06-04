@@ -1,0 +1,73 @@
+﻿\section{HỆ THỐNG CẢM BIẾN VÀ XỬ LÝ DỮ LIỆU}
+
+\subsection{Vai trò của cảm biến trong đề tài}
+
+Trong hệ thống TurtleBot4, cảm biến không chỉ dùng để quan sát mà còn trực tiếp quyết định khả năng tự hành. LiDAR giúp robot nhận biết vật cản và xây dựng bản đồ; camera RGB-D giúp phát hiện và định vị mục tiêu; odometry cung cấp chuyển động tương đối; TF liên kết dữ liệu giữa các hệ tọa độ. Sự kết hợp này tạo thành nền tảng cho SLAM, Nav2 và Mission Manager.
+
+\subsection{LiDAR và dữ liệu \texttt{/scan}}
+
+LiDAR là cảm biến chủ đạo cho bài toán SLAM và tránh vật cản. Dữ liệu được publish qua topic \texttt{/scan}. Trong cấu hình SLAM Toolbox, \texttt{scan\_topic} được đặt là \texttt{/scan}, frame cơ sở là \texttt{base\_link}, frame bản đồ là \texttt{map} và frame odometry là \texttt{odom}. Các tham số đáng chú ý gồm độ phân giải bản đồ \(0.05\,m\), tầm đo tối thiểu \(0.2\,m\), tầm đo tối đa \(12.0\,m\), chu kỳ cập nhật bản đồ \(2.0\,s\).
+
+Trong quá trình phát triển, lỗi dữ liệu \texttt{/scan} có giá trị bất thường hoặc gần như cố định có thể xuất hiện do cấu hình vị trí LiDAR, collision model hoặc lỗi mô phỏng. Việc kiểm tra topic \texttt{/scan}, frame \texttt{rplidar\_link} và quan sát LaserScan trong RViz là bước quan trọng để đảm bảo chất lượng dữ liệu đầu vào.
+
+\subsection{Camera RGB-D OAK-D}
+
+Camera OAK-D trong mô phỏng cung cấp ba nhóm dữ liệu chính: ảnh RGB, ảnh depth và thông số nội tại camera. Node \texttt{oakd\_detection\_node} subscribe ảnh RGB từ \texttt{/oakd/rgb/preview/image\_raw}. Node \texttt{object\_localization\_node} subscribe \texttt{/oakd/rgb/preview/depth} và \texttt{/oakd/rgb/preview/camera\_info} để tính vị trí mục tiêu 3D.
+
+\begin{table}[H]
+\centering
+\caption{Các topic cảm biến chính}
+\begin{tabularx}{\textwidth}{|p{5cm}|Y|}
+\hline
+\textbf{Topic} & \textbf{Ý nghĩa} \\
+\hline
+\texttt{/scan} & Dữ liệu LiDAR 2D dùng cho SLAM, localization và costmap. \\
+\hline
+\texttt{/odom} & Ước lượng chuyển động tương đối của robot. \\
+\hline
+\texttt{/oakd/rgb/preview/image\_raw} & Ảnh RGB đầu vào cho YOLOv8. \\
+\hline
+\texttt{/oakd/rgb/preview/depth} & Ảnh chiều sâu để tính khoảng cách tới mục tiêu. \\
+\hline
+\texttt{/oakd/rgb/preview/camera\_info} & Ma trận nội tại camera dùng cho chuyển đổi 2D--3D. \\
+\hline
+\end{tabularx}
+\end{table}
+
+\subsection{Nhận diện đối tượng bằng YOLOv8n}
+
+Node \texttt{tb4\_vision\_oak} tải mô hình YOLOv8n từ thư mục \texttt{models/yolov8n.pt}. Ngưỡng confidence mặc định là \(0.5\). Với mỗi ảnh RGB, node chạy inference, trích xuất bbox, class id và confidence, sau đó publish kết quả dưới dạng \texttt{vision\_msgs/Detection2DArray} trên topic \texttt{/vision/detected\_objects}.
+
+Việc sử dụng YOLOv8n có ưu điểm là tốc độ xử lý nhanh và đủ chính xác cho bài toán phát hiện người trong mô phỏng. Trong code, lớp \texttt{person} có \texttt{class\_id = 0} theo COCO dataset được ưu tiên khi có nhiều detection. Nếu không có người, detection có confidence cao nhất được chọn làm ứng viên.
+
+\subsection{Định vị mục tiêu từ RGB-D}
+
+Sau khi có bbox từ YOLOv8, node \texttt{object\_localization\_node} lấy tâm bbox \((u,v)\), đọc depth tại vùng lân cận tâm và dùng median để giảm ảnh hưởng pixel lỗi. Nếu depth hợp lệ, vị trí 3D trong hệ camera được tính theo mô hình pinhole:
+
+\[
+X_c = \frac{(u-c_x)Z}{f_x}, \quad
+Y_c = \frac{(v-c_y)Z}{f_y}, \quad
+Z_c = Z
+\]
+
+Sau đó, hệ thống ánh xạ trục camera sang quy ước ROS:
+
+\[
+x_{ros}=Z_c, \qquad y_{ros}=-X_c, \qquad z_{ros}=-Y_c
+\]
+
+Kết quả được publish qua \texttt{/target\_object\_pose\_map} dưới dạng \texttt{PoseStamped} và \texttt{/target\_object\_marker} dưới dạng \texttt{Marker} để hiển thị trên RViz. Mặc dù tên topic có hậu tố \texttt{map}, frame ban đầu vẫn là \texttt{oakd\_link}; Mission Manager sau đó dùng TF để chuyển quan hệ sang frame \texttt{map}.
+
+\subsection{TF và hợp nhất thông tin cảm biến}
+
+TF là cơ chế quan trọng giúp hợp nhất thông tin từ nhiều cảm biến. Khi Mission Manager nhận pose mục tiêu trong frame camera, nó dùng \texttt{tf2\_ros.Buffer} để lookup transform từ \texttt{oakd\_link} sang \texttt{map}. Nhờ đó, vị trí tương đối của mục tiêu có thể được chuyển thành vị trí toàn cục phục vụ lập kế hoạch đường đi.
+
+Nếu TF không đầy đủ hoặc không đồng bộ thời gian, hệ thống sẽ không thể biến đổi mục tiêu sang bản đồ, dẫn tới Mission Manager không gửi được goal tiếp cận. Đây là lý do RViz cần hiển thị đồng thời TF, image, scan, map và marker trong quá trình debug.
+
+\subsection{Đánh giá kỹ thuật hệ cảm biến}
+
+Hệ cảm biến trong đề tài có tính bổ sung lẫn nhau. LiDAR ổn định cho định vị hình học và tránh vật cản, nhưng không cung cấp thông tin ngữ nghĩa. Camera RGB cung cấp thông tin ngữ nghĩa qua YOLO, nhưng thiếu khoảng cách nếu không có depth. Odometry có đáp ứng nhanh, nhưng tích lũy sai số theo thời gian. TF là lớp liên kết hình học giúp toàn bộ dữ liệu có thể sử dụng chung trong một hệ quy chiếu.
+
+\subsection{Kết luận chương}
+
+Chương này đã phân tích chi tiết hệ thống cảm biến của TurtleBot4 trong đề tài, bao gồm LiDAR, camera RGB-D, odometry, TF, YOLOv8 và định vị mục tiêu 3D. Đây là lớp thông tin đầu vào quyết định chất lượng của SLAM, Nav2 và Mission Manager.
