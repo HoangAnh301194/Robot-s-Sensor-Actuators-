@@ -1,67 +1,567 @@
-﻿\section{KẾT QUẢ MÔ PHỎNG VÀ ĐÁNH GIÁ}
+\providecommand{\placeholderfigure}[3]{%
+    \begin{figure}[H]
+        \centering
+        \fbox{%
+            \parbox[c][4.0cm][c]{0.88\textwidth}{%
+                \centering
+                \textit{#1}%
+            }%
+        }
+        \caption{#2}
+        \label{#3}
+    \end{figure}
+}
+
+\section{KẾT QUẢ MÔ PHỎNG VÀ ĐÁNH GIÁ}
+\label{sec:simulation-results-evaluation}
+
+Chương này trình bày cách tổng hợp kết quả mô phỏng và đánh giá hệ thống robot tự hành TurtleBot4 sau khi các thành phần đã được triển khai trong môi trường Gazebo/Ignition. Khác với các chương trước chủ yếu trình bày cơ sở lý thuyết, kiến trúc, cảm biến và điều khiển, nội dung chương này tập trung trả lời câu hỏi: hệ thống đã chạy được những chức năng nào, chất lượng của từng khối ra sao, còn hạn chế gì và cần cải tiến theo hướng nào.
+
+Việc đánh giá được thực hiện theo hướng hệ thống, tức là không chỉ xem riêng từng node ROS2 mà còn xem xét toàn bộ chuỗi xử lý từ mô phỏng, cảm biến, SLAM, điều hướng, nhận diện, định vị mục tiêu đến hành vi tiếp cận. Cách đánh giá này phù hợp với bản chất của robot tự hành, vì một sai số nhỏ ở cảm biến, TF hoặc navigation đều có thể ảnh hưởng đến kết quả cuối cùng của nhiệm vụ.
+
+\subsection{Mục đích và phạm vi đánh giá}
+\label{subsec:evaluation-purpose-scope}
+
+Mục đích của phần đánh giá là xác nhận hệ thống đã đáp ứng các mục tiêu chính của đề tài ở mức mô phỏng. Các mục tiêu cần được kiểm tra gồm: robot có thể được spawn trong môi trường mô phỏng, các topic cảm biến có dữ liệu, hệ thống có thể xây dựng bản đồ hoặc sử dụng bản đồ để định vị, Nav2 có thể nhận goal, YOLOv8n có thể phát hiện mục tiêu, Object Localization có thể tạo pose mục tiêu và Mission Manager có thể điều phối quá trình tuần tra -- tiếp cận.
+
+Phạm vi đánh giá trong chương này dừng ở mức kiểm chứng chức năng và phân tích kỹ thuật. Do hệ thống chưa triển khai trên robot thật, các yếu tố như sai số cơ khí, trượt bánh thực tế, độ rung cảm biến, thay đổi ánh sáng và độ trễ phần cứng chưa được đo trực tiếp. Tuy nhiên, đánh giá mô phỏng vẫn có giá trị vì nó giúp kiểm tra logic tích hợp, luồng dữ liệu ROS2 và khả năng phối hợp giữa các module.
+
+\begin{table}[H]
+    \centering
+    \caption{Nội dung và mục đích đánh giá hệ thống}
+    \label{tab:evaluation-scope}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.22\textwidth}|>{\raggedright\arraybackslash}p{0.34\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Nội dung đánh giá} & \textbf{Mục đích} & \textbf{Kết quả cần quan sát} \\
+        \hline
+        Mô phỏng robot & Kiểm tra robot TurtleBot4 Lite có xuất hiện và hoạt động trong warehouse. & Robot spawn đúng vị trí, có clock mô phỏng và các plugin cảm biến hoạt động. \\
+        \hline
+        Hệ cảm biến & Kiểm tra LiDAR, camera RGB-D, odometry và TF. & Các topic \texttt{/scan}, \texttt{/odom}, ảnh RGB, ảnh depth và \texttt{camera\_info} có dữ liệu ổn định. \\
+        \hline
+        SLAM/Localization & Kiểm tra khả năng tạo bản đồ hoặc định vị robot trên bản đồ. & Có map, pose robot và transform \texttt{map -> odom} hợp lệ. \\
+        \hline
+        Navigation & Kiểm tra Nav2 nhận goal và điều hướng theo waypoint. & Robot di chuyển đến waypoint, tránh vật cản và cập nhật trạng thái goal. \\
+        \hline
+        Nhận diện -- định vị mục tiêu & Kiểm tra YOLOv8n và Object Localization. & Có detection 2D, pose mục tiêu 3D và marker hiển thị trên RViz. \\
+        \hline
+        Mission Manager & Kiểm tra hành vi tuần tra -- phát hiện -- tiếp cận. & Robot tạm dừng patrol, tính safe goal, tiếp cận mục tiêu rồi quay lại tuần tra. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    >=Latex,
+    node distance=1.5cm and 1cm,
+    block/.style={rectangle, draw, rounded corners, fill=blue!10, align=center, minimum height=1.2cm, text width=2.8cm}
+]
+\node[block] (sim) {Mô phỏng\\(Gazebo)};
+\node[block, right=of sim] (sensor) {Cảm biến\\(LiDAR, Camera)};
+\node[block, right=of sensor] (slam) {SLAM \&\\Localization};
+\node[block, below=of slam] (nav) {Navigation\\(Nav2)};
+\node[block, left=of nav] (perception) {Nhận diện \&\\Định vị (YOLO)};
+\node[block, left=of perception] (mission) {Điều phối\\(Mission Manager)};
+
+\draw[->, thick] (sim) -- (sensor);
+\draw[->, thick] (sensor) -- (slam);
+\draw[->, thick] (slam) -- (nav);
+\draw[->, thick] (sensor) -- (perception);
+\draw[->, thick] (perception) -- (mission);
+% Route mission -> nav below the perception node
+\draw[->, thick] (mission.south) -- ++(0,-0.4) -| (nav.south);
+% Route nav -> sim around the left side
+\draw[->, thick, dashed] (nav.south) -- ++(0,-0.8) -| ([xshift=-0.6cm]mission.west) |- (sim.west);
+\end{tikzpicture}
+\caption{Quy trình đánh giá tổng thể hệ thống TurtleBot4 trong mô phỏng}
+\label{fig:overall-evaluation-process}
+\end{figure}
 
 \subsection{Kết quả đạt được}
+\label{subsec:achieved-results}
 
-Hệ thống đã được xây dựng theo kiến trúc ROS2 module hóa và có thể khởi chạy luồng nhiệm vụ tự hành trong môi trường mô phỏng. Các kết quả chính gồm:
+Kết quả mô phỏng cho thấy hệ thống đã đạt được mức tích hợp chức năng cơ bản. Robot TurtleBot4 Lite có thể được khởi chạy trong môi trường warehouse của Gazebo/Ignition. Các nguồn dữ liệu LiDAR, camera RGB-D, odometry và TF có thể được publish để các node xử lý sử dụng. Trên cơ sở đó, SLAM Toolbox, Nav2, YOLOv8n, Object Localization và Mission Manager được ghép lại thành một pipeline nhiệm vụ tự hành.
 
-\begin{itemize}
-    \item TurtleBot4 Lite spawn thành công trong môi trường warehouse của Gazebo/Ignition.
-    \item LiDAR, camera RGB-D, odometry và TF hoạt động, cung cấp dữ liệu cho các node xử lý.
-    \item SLAM Toolbox có thể sử dụng dữ liệu LiDAR để xây dựng bản đồ occupancy grid.
-    \item Nav2 có thể nhận goal và điều hướng robot theo waypoint.
-    \item YOLOv8n được tích hợp để phát hiện mục tiêu từ ảnh RGB.
-    \item Object Localization tính được vị trí mục tiêu tương đối từ detection và depth.
-    \item Marker mục tiêu có thể hiển thị trên RViz.
-    \item Mission Manager điều phối được quá trình tuần tra, phát hiện và tiếp cận mục tiêu.
-\end{itemize}
+Điểm quan trọng của kết quả này là hệ thống không chỉ chạy từng node độc lập mà đã hình thành được luồng nhiệm vụ tương đối đầy đủ: robot tuần tra theo waypoint, camera quan sát môi trường, YOLO phát hiện mục tiêu, ảnh depth hỗ trợ tính vị trí mục tiêu, Mission Manager chuyển mục tiêu thành goal an toàn và Nav2 điều khiển robot tiếp cận. Đây là kết quả phù hợp với mục tiêu xây dựng một hệ robot tự hành trong môi trường mô phỏng.
+
+\begin{table}[H]
+    \centering
+    \caption{Tổng hợp các kết quả đạt được}
+    \label{tab:achieved-results}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.21\textwidth}|>{\raggedright\arraybackslash}p{0.38\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Nhóm kết quả} & \textbf{Kết quả đạt được} & \textbf{Ý nghĩa đối với hệ thống} \\
+        \hline
+        Mô phỏng & TurtleBot4 Lite được spawn trong warehouse của Gazebo/Ignition. & Tạo môi trường thử nghiệm ổn định trước khi triển khai trên robot thật. \\
+        \hline
+        Cảm biến & LiDAR, camera RGB-D, odometry và TF có dữ liệu phục vụ xử lý. & Cung cấp đầu vào cho SLAM, Nav2, YOLO và định vị mục tiêu. \\
+        \hline
+        SLAM/Map & SLAM Toolbox có thể sử dụng dữ liệu LiDAR để tạo occupancy grid map. & Robot có cơ sở bản đồ để thực hiện navigation. \\
+        \hline
+        Navigation & Nav2 nhận goal từ Patrol Node hoặc Mission Manager. & Robot có thể di chuyển theo waypoint và tiếp cận mục tiêu. \\
+        \hline
+        Nhận diện & YOLOv8n phát hiện đối tượng từ ảnh RGB. & Bổ sung lớp thông tin ngữ nghĩa cho robot. \\
+        \hline
+        Định vị mục tiêu & Object Localization tạo pose mục tiêu từ bbox và depth. & Chuyển detection 2D thành vị trí không gian để dùng cho điều hướng. \\
+        \hline
+        Điều phối hành vi & Mission Manager điều phối tuần tra, phát hiện và tiếp cận. & Tạo hành vi tự hành thay vì chỉ chạy điều hướng đơn lẻ. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\subsection{Phương pháp đánh giá và chỉ tiêu định lượng đề xuất}
+\label{subsec:quantitative-metrics}
+
+Trong báo cáo gốc, kết quả được đánh giá chủ yếu theo mức hoàn thành chức năng. Để phần đánh giá rõ ràng hơn, có thể bổ sung thêm một số chỉ tiêu định lượng. Các chỉ tiêu này không bắt buộc phải có số liệu thực nghiệm ngay, nhưng nên trình bày công thức để thể hiện cách đánh giá nếu hệ thống được đo trong nhiều lần chạy.
+
+Giả sử hệ thống được thử nghiệm $N$ lần, trong đó $N_s$ là số lần robot hoàn thành nhiệm vụ tuần tra -- phát hiện -- tiếp cận. Tỷ lệ hoàn thành nhiệm vụ được tính:
+
+\begin{equation}
+    S = \frac{N_s}{N}\times 100\%
+    \label{eq:mission-success-rate}
+\end{equation}
+
+Trong đó, $S$ càng lớn thì độ tin cậy tổng thể của hệ thống càng cao. Nếu $S$ thấp, cần xác định lỗi xảy ra ở bước nào: cảm biến không có dữ liệu, YOLO không phát hiện, TF không chuyển được frame, Nav2 không nhận goal hoặc Mission Manager xử lý sai trạng thái.
+
+Thời gian hoàn thành nhiệm vụ trung bình được xác định theo công thức:
+
+\begin{equation}
+    \overline{T}
+    =
+    \frac{1}{N}
+    \sum_{i=1}^{N} T_i
+    \label{eq:average-mission-time}
+\end{equation}
+
+Trong đó, $T_i$ là thời gian hoàn thành nhiệm vụ ở lần thử thứ $i$. Đại lượng này phản ánh mức độ nhanh chậm của hệ thống khi thực hiện một chu trình tự hành. Nếu thời gian quá lớn, nguyên nhân có thể đến từ đường đi chưa tối ưu, robot quay nhiều, local planner dao động hoặc target pose không ổn định.
+
+Sai số định vị mục tiêu có thể được đánh giá bằng khoảng cách Euclid giữa vị trí ước lượng $\widehat{\mathbf{p}}_i$ và vị trí tham chiếu $\mathbf{p}_i^{*}$. Với $\widehat{\mathbf{p}}_i=(\widehat{x}_i,\widehat{y}_i)$ và $\mathbf{p}_i^{*}=(x_i^{*},y_i^{*})$, ta có:
+
+\begin{equation}
+    e_i
+    =
+    \sqrt{
+        \left(\widehat{x}_i-x_i^{*}\right)^2
+        +
+        \left(\widehat{y}_i-y_i^{*}\right)^2
+    }
+    \label{eq:target-localization-error}
+\end{equation}
+
+Sai số trung bình qua $N$ lần đo là:
+
+\begin{equation}
+    \overline{e}
+    =
+    \frac{1}{N}
+    \sum_{i=1}^{N} e_i
+    \label{eq:average-target-localization-error}
+\end{equation}
+
+Nếu $\overline{e}$ lớn, cần kiểm tra ảnh depth, camera intrinsic, phép biến đổi TF từ camera sang \texttt{map} và cách chọn điểm depth trong bbox. Đây là chỉ tiêu quan trọng nếu hệ thống cần tiếp cận mục tiêu chính xác.
+
+\begin{table}[H]
+    \centering
+    \caption{Các chỉ tiêu định lượng đề xuất}
+    \label{tab:quantitative-metrics}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.24\textwidth}|>{\raggedright\arraybackslash}p{0.36\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Chỉ tiêu} & \textbf{Công thức/cách kiểm tra} & \textbf{Ý nghĩa} \\
+        \hline
+        Tỷ lệ hoàn thành nhiệm vụ & $S=\dfrac{N_s}{N}\times 100\%$. & Đánh giá độ tin cậy tổng thể của pipeline tự hành. \\
+        \hline
+        Thời gian hoàn thành trung bình & $\overline{T}=\dfrac{1}{N}\sum_{i=1}^{N}T_i$. & Đánh giá tốc độ thực hiện nhiệm vụ. \\
+        \hline
+        Sai số định vị mục tiêu & $e_i=\sqrt{(\widehat{x}_i-x_i^*)^2+(\widehat{y}_i-y_i^*)^2}$. & Đánh giá độ chính xác của Object Localization và TF. \\
+        \hline
+        Tỷ lệ phát hiện đúng & $\mathrm{Precision}=\dfrac{TP}{TP+FP}$. & Đánh giá chất lượng nhận diện YOLO. \\
+        \hline
+        Tỷ lệ bỏ sót mục tiêu & $\mathrm{Recall}=\dfrac{TP}{TP+FN}$. & Đánh giá khả năng phát hiện đủ mục tiêu. \\
+        \hline
+        Độ ổn định navigation & Quan sát số lần recovery, dao động hoặc goal bị hủy. & Đánh giá chất lượng Nav2 và costmap. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    >=Latex,
+    mindmap/.style={rectangle, draw, rounded corners, fill=green!10, align=center, minimum height=0.8cm},
+    leaf/.style={rectangle, draw, fill=yellow!10, align=center, minimum height=0.6cm, text width=2.8cm}
+]
+\node[mindmap, fill=orange!20, font=\bfseries] (center) at (0, 0) {Chỉ tiêu đánh giá hệ thống};
+
+\node[leaf] (t1) at (-4.2, 2) {Tỷ lệ hoàn thành nhiệm vụ};
+\node[leaf] (t2) at (0, 2) {Thời gian trung bình};
+\node[leaf] (t3) at (4.2, 2) {Sai số định vị mục tiêu};
+\node[leaf] (t4) at (-2.5, -2) {Precision \& Recall};
+\node[leaf] (t5) at (2.5, -2) {Độ ổn định Navigation};
+
+\draw[->, thick] (center) -- (t1.south);
+\draw[->, thick] (center) -- (t2.south);
+\draw[->, thick] (center) -- (t3.south);
+\draw[->, thick] (center) -- (t4.north);
+\draw[->, thick] (center) -- (t5.north);
+\end{tikzpicture}
+\caption{Các chỉ tiêu đánh giá hệ thống robot tự hành TurtleBot4}
+\label{fig:evaluation-metrics}
+\end{figure}
 
 \subsection{Đánh giá hệ cảm biến}
+\label{subsec:sensor-evaluation}
 
-Hệ cảm biến đáp ứng được yêu cầu cơ bản của bài toán. LiDAR cung cấp dữ liệu đủ cho SLAM và costmap. Camera RGB-D hỗ trợ nhận diện và định vị mục tiêu. Odometry và TF cung cấp liên kết trạng thái cần thiết cho navigation. Tuy nhiên, hệ thống phụ thuộc mạnh vào chất lượng TF và đồng bộ thời gian. Nếu transform giữa camera và map không sẵn sàng, Mission Manager không thể chuyển mục tiêu sang tọa độ toàn cục.
+Hệ cảm biến là lớp đầu vào của toàn bộ hệ thống, vì vậy chất lượng dữ liệu cảm biến ảnh hưởng trực tiếp đến SLAM, navigation và định vị mục tiêu. Trong đề tài, các cảm biến chính gồm LiDAR, camera RGB-D, odometry và TF. Mỗi nguồn dữ liệu có ưu điểm và hạn chế riêng, do đó cần đánh giá theo cả khả năng cung cấp dữ liệu và vai trò trong nhiệm vụ tự hành.
 
-Một điểm cải thiện đáng chú ý là xử lý depth. Việc dùng median trong cửa sổ quanh tâm bbox giúp tăng độ ổn định so với lấy một pixel đơn lẻ. Đây là lựa chọn hợp lý vì ảnh depth thường có điểm mất dữ liệu hoặc nhiễu cục bộ tại biên vật thể.
+\subsubsection{Đánh giá LiDAR}
+\label{subsubsec:lidar-evaluation}
+
+LiDAR đóng vai trò chính trong bài toán SLAM và xây dựng costmap cho Nav2. Trong mô phỏng, LiDAR publish dữ liệu qua topic \texttt{/scan}. Khi topic này ổn định, các node như SLAM Toolbox hoặc local costmap có thể sử dụng khoảng cách đo được để xác định vật cản xung quanh robot.
+
+Ưu điểm của LiDAR là dữ liệu có tính hình học rõ ràng, phù hợp để phát hiện tường, kệ hàng và vật cản trong môi trường warehouse. Tuy nhiên, LiDAR 2D chỉ quan sát trong một mặt phẳng quét, nên các vật thể quá thấp, quá cao hoặc nằm ngoài mặt phẳng quét có thể không được phản ánh đầy đủ trong \texttt{/scan}.
+
+\subsubsection{Đánh giá camera RGB-D}
+\label{subsubsec:rgbd-camera-evaluation}
+
+Camera RGB-D OAK-D cung cấp hai loại dữ liệu quan trọng: ảnh màu để nhận diện và ảnh chiều sâu để ước lượng khoảng cách. Trong hệ thống, ảnh RGB là đầu vào cho YOLOv8n, còn ảnh depth cùng \texttt{camera\_info} được dùng để tính tọa độ 3D của mục tiêu.
+
+Điểm mạnh của camera RGB-D là bổ sung thông tin ngữ nghĩa mà LiDAR không có. Nhờ ảnh RGB, robot có thể biết đối tượng đang quan sát là người hoặc vật thể nào. Nhờ ảnh depth, detection 2D có thể được chuyển thành pose tương đối trong không gian. Hạn chế chính nằm ở chất lượng ảnh depth: nếu mục tiêu bị che khuất, nằm ở biên vật thể hoặc depth bị nhiễu, pose mục tiêu có thể dao động.
+
+\subsubsection{Đánh giá odometry và TF}
+\label{subsubsec:odometry-tf-evaluation}
+
+Odometry giúp robot có thông tin chuyển động tương đối liên tục, phục vụ localization và điều khiển. Trong mô phỏng, odometry thường ổn định hơn so với thực tế vì chưa chịu ảnh hưởng đầy đủ của trượt bánh, sai số cơ khí và mặt sàn. TF/TF2 đóng vai trò liên kết các frame như \texttt{map}, \texttt{odom}, \texttt{base\_link}, \texttt{oakd\_link} và \texttt{rplidar\_link}.
+
+Nếu TF đầy đủ và đồng bộ, dữ liệu từ camera có thể chuyển sang frame \texttt{map} để Mission Manager tính goal tiếp cận. Nếu TF thiếu hoặc sai, robot có thể phát hiện mục tiêu nhưng không biết mục tiêu nằm ở đâu trên bản đồ. Vì vậy, đánh giá TF là bước bắt buộc khi kiểm thử hệ thống.
+
+\begin{table}[H]
+    \centering
+    \caption{Đánh giá các nguồn dữ liệu cảm biến}
+    \label{tab:sensor-evaluation}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.20\textwidth}|>{\raggedright\arraybackslash}p{0.25\textwidth}|>{\raggedright\arraybackslash}p{0.25\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Nguồn dữ liệu} & \textbf{Vai trò trong đánh giá} & \textbf{Ưu điểm} & \textbf{Hạn chế cần chú ý} \\
+        \hline
+        LiDAR \texttt{/scan} & Kiểm tra SLAM, localization và costmap. & Đo vật cản hình học ổn định, phù hợp môi trường trong nhà. & Chỉ quan sát trong mặt phẳng quét 2D. \\
+        \hline
+        Camera RGB & Đầu vào cho YOLOv8n. & Cung cấp thông tin ngữ nghĩa về mục tiêu. & Phụ thuộc ánh sáng, góc nhìn và chất lượng mô hình nhận diện. \\
+        \hline
+        Ảnh depth & Tính khoảng cách và pose 3D của mục tiêu. & Biến detection 2D thành vị trí không gian. & Dễ nhiễu ở biên vật thể hoặc vùng bị che khuất. \\
+        \hline
+        Odometry & Ước lượng chuyển động liên tục của robot. & Tần số cao, hỗ trợ localization. & Có thể tích lũy sai số nếu triển khai trên robot thật. \\
+        \hline
+        TF/TF2 & Chuyển đổi dữ liệu giữa các frame. & Là điều kiện bắt buộc để hợp nhất cảm biến. & Sai frame hoặc lệch thời gian làm hỏng pose mục tiêu. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/chapter7/map.png}
+    \caption{Minh họa đánh giá bản đồ và dữ liệu cảm biến (sử dụng map thực tế của dự án)}
+    \label{fig:rviz-sensor-evaluation}
+\end{figure}
 
 \subsection{Đánh giá cơ cấu chấp hành và điều khiển}
+\label{subsec:actuator-control-evaluation}
 
-Về lớp chấp hành, robot vi sai phù hợp với môi trường trong nhà và nhiệm vụ tuần tra. Nav2 giúp giảm đáng kể độ phức tạp khi điều khiển vì hệ thống không cần tự viết bộ điều khiển local planner từ đầu. Patrol Node và Mission Manager chỉ cần gửi goal, còn Nav2 xử lý lập đường, tránh vật cản và tạo lệnh vận tốc.
+Cơ cấu chấp hành của TurtleBot4 là truyền động vi sai. Trong hệ thống, các node nhiệm vụ không điều khiển trực tiếp tốc độ từng bánh mà gửi goal cho Nav2. Nav2 sau đó sinh lệnh vận tốc \texttt{/cmd\_vel} gồm vận tốc tuyến tính $v$ và vận tốc góc $\omega$. Bộ điều khiển cấp thấp chuyển lệnh này thành chuyển động bánh trái và bánh phải.
 
-Tuy nhiên, hệ thống hiện chưa tối ưu sâu các tham số planner, controller và costmap. Với môi trường phức tạp hoặc nhiều vật cản động, cần tinh chỉnh thêm để tăng độ mượt, giảm dao động và tránh kẹt cục bộ.
+Kết quả điều khiển được đánh giá thông qua khả năng robot di chuyển đến waypoint, chuyển hướng ổn định, tránh vật cản và tiếp cận mục tiêu ở khoảng cách an toàn. Nếu robot đi quá gần mục tiêu, cần kiểm tra tham số \texttt{safe\_distance} trong Mission Manager. Nếu robot dao động hoặc quay nhiều trước khi tới goal, cần kiểm tra local planner, costmap và cấu hình footprint của robot.
+
+\begin{table}[H]
+    \centering
+    \caption{Đánh giá cơ cấu chấp hành và điều khiển}
+    \label{tab:actuator-control-evaluation}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.24\textwidth}|>{\raggedright\arraybackslash}p{0.36\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Khía cạnh đánh giá} & \textbf{Dấu hiệu đạt yêu cầu} & \textbf{Dấu hiệu cần cải thiện} \\
+        \hline
+        Nhận goal & Nav2 chấp nhận goal từ Patrol Node hoặc Mission Manager. & Goal bị từ chối, action server chưa sẵn sàng hoặc frame sai. \\
+        \hline
+        Bám đường & Robot di chuyển theo đường đi toàn cục và tránh vật cản. & Robot lệch đường, quay vòng hoặc kẹt gần vật cản. \\
+        \hline
+        Lệnh vận tốc & \texttt{/cmd\_vel} thay đổi phù hợp với hướng di chuyển. & Lệnh vận tốc giật, đổi dấu liên tục hoặc bằng $0$ bất thường. \\
+        \hline
+        Tiếp cận mục tiêu & Robot dừng trước mục tiêu với khoảng cách an toàn. & Robot dừng quá xa, quá gần hoặc không hướng về mục tiêu. \\
+        \hline
+        Khôi phục lỗi & Nav2 có thể recovery khi gặp tình huống khó. & Robot bị kẹt cục bộ và không thoát được. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+Có thể bổ sung sai số dừng tại mục tiêu để đánh giá mức độ chính xác của hành vi tiếp cận. Gọi $d_{\mathrm{actual}}$ là khoảng cách robot đến mục tiêu sau khi dừng và $d_s$ là khoảng cách an toàn mong muốn, sai số dừng được tính:
+
+\begin{equation}
+    e_d
+    =
+    \left|
+        d_{\mathrm{actual}}-d_s
+    \right|
+    \label{eq:stopping-distance-error}
+\end{equation}
+
+Nếu $e_d$ nhỏ, robot dừng gần đúng vị trí mong muốn. Nếu $e_d$ lớn, cần kiểm tra sai số target pose, logic tính safe goal hoặc độ chính xác của Nav2 khi tới goal.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Latex, scale=1.5]
+% Robot
+\draw[fill=blue!20, thick] (0,0) circle (0.4) node {Robot};
+\draw[->, thick] (0.4,0) -- (0.8,0);
+
+% Target
+\draw[fill=red!20, thick] (5,0) circle (0.3) node {Mục tiêu};
+
+% Safe zone
+\draw[dashed, red, thick] (5,0) circle (1.5);
+\node[red, above] at (5, 1.5) {Vùng không an toàn ($d < d_s$)};
+
+% Distance
+\draw[<->, thick] (0, -0.6) -- (5, -0.6) node[midway, below] {$d_{\mathrm{actual}}$ (Khoảng cách dừng thực tế)};
+\draw[<->, thick] (3.5, 0.2) -- (5, 0.2) node[midway, above] {$d_s$};
+
+% Stopping point error
+\draw[fill=green!50, thick] (3.3,0) circle (0.1) node[above left] {Vị trí dừng};
+\draw[<->, thick, blue] (3.3, -0.2) -- (3.5, -0.2) node[midway, below] {$e_d$};
+\end{tikzpicture}
+\caption{Minh họa robot tiếp cận mục tiêu và sai số dừng tại khoảng cách an toàn $d_s$}
+\label{fig:safe-distance-evaluation}
+\end{figure}
+
+\subsection{Đánh giá nhận diện và định vị mục tiêu}
+\label{subsec:detection-localization-evaluation}
+
+Khối nhận diện và định vị mục tiêu là phần tạo điểm khác biệt của hệ thống so với một robot chỉ chạy navigation. YOLOv8n chịu trách nhiệm phát hiện mục tiêu từ ảnh RGB, còn Object Localization sử dụng bbox, ảnh depth và \texttt{camera\_info} để tính pose mục tiêu. Vì vậy, chất lượng của bước này phụ thuộc đồng thời vào mô hình nhận diện và dữ liệu chiều sâu.
+
+Đối với YOLOv8n, có thể đánh giá bằng các đại lượng $TP$, $FP$ và $FN$. $TP$ là số lần phát hiện đúng mục tiêu, $FP$ là số lần phát hiện sai đối tượng, $FN$ là số lần có mục tiêu nhưng hệ thống không phát hiện. Từ đó có thể tính Precision và Recall:
+
+\begin{equation}
+    \mathrm{Precision}
+    =
+    \frac{TP}{TP+FP}
+    \label{eq:precision}
+\end{equation}
+
+\begin{equation}
+    \mathrm{Recall}
+    =
+    \frac{TP}{TP+FN}
+    \label{eq:recall}
+\end{equation}
+
+Precision cao cho thấy hệ thống ít báo nhầm. Recall cao cho thấy hệ thống ít bỏ sót mục tiêu. Trong bài toán tuần tra và tiếp cận người, recall quan trọng vì robot cần phát hiện được người khi xuất hiện trong vùng quan sát; tuy nhiên precision cũng cần đủ cao để tránh robot phản ứng với đối tượng không mong muốn.
+
+Đối với định vị mục tiêu, cần quan sát độ ổn định của pose mục tiêu. Nếu marker trong RViz dao động mạnh khi mục tiêu đứng yên, có thể nguyên nhân là depth nhiễu, bbox thay đổi giữa các frame hoặc transform TF không đồng bộ. Việc lấy median depth trong vùng gần tâm bbox giúp giảm ảnh hưởng của pixel lỗi so với lấy một điểm depth duy nhất.
+
+\begin{table}[H]
+    \centering
+    \caption{Đánh giá nhận diện và định vị mục tiêu}
+    \label{tab:detection-localization-evaluation}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.22\textwidth}|>{\raggedright\arraybackslash}p{0.36\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Thành phần} & \textbf{Kết quả cần đánh giá} & \textbf{Cách kiểm tra} \\
+        \hline
+        YOLOv8n & Phát hiện đúng mục tiêu, confidence đủ cao. & Quan sát \texttt{/vision/detected\_objects} và ảnh debug. \\
+        \hline
+        Bounding box & BBox bao quanh mục tiêu hợp lý. & So sánh bbox trên ảnh RGB với vị trí thực của mục tiêu. \\
+        \hline
+        Depth & Giá trị depth tại bbox hợp lệ và ít nhiễu. & Kiểm tra ảnh depth, loại bỏ NaN hoặc giá trị ngoài khoảng. \\
+        \hline
+        \texttt{CameraInfo} & Thông số $f_x$, $f_y$, $c_x$, $c_y$ được nhận đúng. & Kiểm tra topic \texttt{/camera\_info} và ma trận nội tại. \\
+        \hline
+        Pose mục tiêu & Pose có frame hợp lệ và ít dao động. & Quan sát \texttt{/target\_object\_pose\_map} và marker RViz. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+% Image RGB
+\draw[fill=gray!10, thick] (0,0) rectangle (5,4);
+\node at (2.5, 3.5) {\textbf{Ảnh RGB (Camera)}};
+\draw[thick, red] (1.5, 0.5) rectangle (3.5, 3);
+\node[red, fill=white, inner sep=1pt] at (2.5, 3) {Person: 0.95};
+\fill[blue] (2.5, 1.75) circle (2pt) node[right=2pt, black] {Tâm BBox};
+
+% RViz View
+\begin{scope}[shift={(8,0)}]
+    \draw[fill=black!80, thick] (0,0) rectangle (5,4);
+    \node[white] at (2.5, 3.5) {\textbf{Không gian 3D (RViz)}};
+    \draw[white, dashed] (0,1) -- (5,1); % ground grid
+    \draw[white, dashed] (1.5,0) -- (3.5,4); % ground grid
+    \fill[green] (2.5, 1.75) circle (3pt);
+    \draw[green, thick] (2.5, 1.75) circle (0.3);
+    \node[green, above=4pt] at (2.5, 2.05) {Marker: Target Pose};
+\end{scope}
+
+% Arrow connecting
+\draw[->, thick, dashed] (5.1, 2) -- node[align=center] {Object\\Localization} (7.9, 2);
+
+\end{tikzpicture}
+\caption{Mô phỏng ảnh RGB có bounding box YOLO và marker mục tiêu 3D trên không gian RViz}
+\label{fig:yolo-rviz-marker-evaluation}
+\end{figure}
 
 \subsection{Đánh giá kiến trúc phần mềm}
+\label{subsec:software-architecture-evaluation}
 
-Kiến trúc module hóa là điểm mạnh của đề tài. Mỗi package có trách nhiệm rõ ràng, giúp dễ debug và mở rộng. Ví dụ, có thể thay YOLOv8n bằng một mô hình custom mà không cần thay đổi Nav2; hoặc có thể thay Patrol Node bằng behavior tree mà không ảnh hưởng tới object localization.
+Kiến trúc phần mềm của hệ thống được tổ chức theo các package ROS2 độc lập. Đây là ưu điểm quan trọng vì mỗi package có nhiệm vụ riêng: bringup khởi chạy hệ thống, vision nhận diện, localization tính pose mục tiêu, patrol gửi waypoint, mission manager điều phối hành vi. Cách tổ chức này giúp việc debug thuận lợi hơn so với viết toàn bộ logic trong một node duy nhất.
 
-Cơ chế publish/subscribe và action của ROS2 phù hợp với hệ thống phân tán. Topic dùng cho dữ liệu liên tục như ảnh, scan, pose; action dùng cho nhiệm vụ kéo dài như navigation goal; parameter dùng cho cấu hình như confidence threshold và safe distance.
+Cơ chế publish/subscribe phù hợp với dữ liệu liên tục như ảnh, scan, odometry và pose. Cơ chế action phù hợp với nhiệm vụ kéo dài như \texttt{NavigateToPose} vì navigation không phải là một lệnh tức thời. Tham số ROS2 giúp điều chỉnh confidence threshold, \texttt{safe\_distance} hoặc topic name mà không phải sửa trực tiếp trong code.
 
-\subsection{Hạn chế}
+\begin{table}[H]
+    \centering
+    \caption{Đánh giá kiến trúc phần mềm ROS2}
+    \label{tab:software-architecture-evaluation}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.25\textwidth}|>{\raggedright\arraybackslash}p{0.20\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Tiêu chí} & \textbf{Đánh giá} & \textbf{Nhận xét} \\
+        \hline
+        Tính module hóa & Tốt & Các chức năng chính được tách thành package rõ ràng. \\
+        \hline
+        Khả năng debug & Tốt & Có thể kiểm tra từng topic và từng node độc lập. \\
+        \hline
+        Khả năng mở rộng & Khá tốt & Có thể thay YOLOv8n bằng model custom hoặc thay Patrol Node bằng behavior tree. \\
+        \hline
+        Phụ thuộc TF & Cần chú ý & Nhiều khối phụ thuộc vào frame và thời gian transform. \\
+        \hline
+        Cấu hình waypoint & Cần cải thiện & Waypoint hiện còn nên đưa ra file YAML để linh hoạt hơn. \\
+        \hline
+    \end{tabularx}
+\end{table}
 
-Bên cạnh các kết quả đạt được, hệ thống vẫn còn một số hạn chế:
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    >=Latex,
+    node distance=1.5cm and 1.5cm,
+    pkg/.style={rectangle, draw, rounded corners, fill=cyan!10, align=center, minimum height=1.2cm, text width=3cm}
+]
+\node[pkg] (bringup) {tb4\_bringup\\(Khởi chạy)};
+\node[pkg, right=2cm of bringup] (vision) {tb4\_vision\_oak\\(YOLOv8n)};
+\node[pkg, right=2cm of vision] (nav) {tb4\_nav\_patrol\\(Tuần tra)};
 
-\begin{itemize}
-    \item Chưa triển khai và kiểm thử trên TurtleBot4 thật.
-    \item Waypoint tuần tra còn hardcode trong source code.
-    \item Mission Manager mới ở dạng logic trạng thái đơn giản, chưa phải behavior tree hoặc finite state machine đầy đủ.
-    \item Chưa tối ưu toàn diện tham số Nav2, costmap, planner và controller.
-    \item Chưa có cơ chế tracking nhiều mục tiêu hoặc mục tiêu chuyển động.
-    \item Pose mục tiêu phụ thuộc vào depth tại bbox, dễ bị ảnh hưởng khi vật thể bị che khuất hoặc depth không ổn định.
-    \item Robot chưa tối ưu hướng quay mặt về phía mục tiêu khi tiếp cận.
-\end{itemize}
+\node[pkg, below=of vision] (loc) {tb4\_object\_\\localization};
+\node[pkg, right=2cm of loc] (mission) {tb4\_mission\_\\manager};
+
+\draw[->, thick] (bringup) -- node[above] {Launch} (vision);
+\draw[->, thick] (bringup.north) |- ++(0, 0.8) -| node[near start, above] {Launch} (nav.north);
+\draw[->, thick] (vision) -- node[right] {BBox 2D} (loc);
+\draw[->, thick] (loc) -- node[above] {Pose 3D} (mission);
+\draw[<->, thick] (mission) -- node[right] {Pause/Resume} (nav);
+\end{tikzpicture}
+\caption{Sơ đồ đánh giá tính module hóa các package ROS2 của hệ thống}
+\label{fig:ros2-module-architecture-evaluation}
+\end{figure}
+
+\subsection{Hạn chế của hệ thống}
+\label{subsec:system-limitations}
+
+Mặc dù hệ thống đã đáp ứng mục tiêu mô phỏng, vẫn còn một số hạn chế cần nêu rõ để đánh giá khách quan. Hạn chế lớn nhất là hệ thống chưa được kiểm thử trên TurtleBot4 thật. Môi trường mô phỏng giúp giảm chi phí và rủi ro, nhưng chưa phản ánh đầy đủ nhiễu cảm biến, sai số lắp đặt, trượt bánh, giới hạn động cơ và thay đổi ánh sáng ngoài thực tế.
+
+Một hạn chế khác là waypoint tuần tra còn mang tính cố định. Nếu muốn robot hoạt động trong nhiều môi trường khác nhau, danh sách waypoint nên được đưa ra file YAML hoặc giao diện cấu hình. Mission Manager hiện mới là logic trạng thái đơn giản, chưa phải behavior tree hoặc finite state machine đầy đủ, nên chưa xử lý được nhiều tình huống phức tạp như mất mục tiêu, nhiều mục tiêu đồng thời, mục tiêu di chuyển hoặc vùng cấm.
+
+\begin{table}[H]
+    \centering
+    \caption{Hạn chế của hệ thống và hướng khắc phục}
+    \label{tab:system-limitations}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.23\textwidth}|>{\raggedright\arraybackslash}p{0.34\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Hạn chế} & \textbf{Ảnh hưởng} & \textbf{Hướng khắc phục} \\
+        \hline
+        Chưa chạy trên robot thật & Chưa đánh giá được sai số phần cứng, độ trễ và nhiễu thực tế. & Triển khai trên TurtleBot4 thật và đo sai số định lượng. \\
+        \hline
+        Waypoint còn cố định & Khó thay đổi nhiệm vụ khi đổi môi trường. & Đưa waypoint ra file YAML hoặc giao diện cấu hình. \\
+        \hline
+        Mission Manager còn đơn giản & Khó xử lý nhiều trạng thái và ngoại lệ. & Nâng cấp thành FSM hoặc Behavior Tree. \\
+        \hline
+        Depth có thể nhiễu & Pose mục tiêu dao động hoặc sai khi mục tiêu bị che khuất. & Lọc theo thời gian, dùng median/Kalman hoặc multi-frame fusion. \\
+        \hline
+        Chưa tracking nhiều mục tiêu & Robot chỉ phản ứng với một mục tiêu ưu tiên. & Bổ sung multi-object tracking và lựa chọn mục tiêu theo ngữ cảnh. \\
+        \hline
+        Nav2 chưa tối ưu sâu & Robot có thể dao động hoặc kẹt trong môi trường phức tạp. & Tối ưu planner, controller, costmap và footprint. \\
+        \hline
+    \end{tabularx}
+\end{table}
 
 \subsection{Hướng phát triển}
+\label{subsec:future-work}
 
-Các hướng phát triển tiếp theo gồm:
+Từ các hạn chế trên, hệ thống có thể phát triển theo ba hướng chính: triển khai thực nghiệm, nâng cấp thuật toán và bổ sung đánh giá định lượng. Hướng đầu tiên là chạy trên TurtleBot4 thật để kiểm tra sai số cảm biến, độ ổn định của odometry, chất lượng camera RGB-D và phản ứng của Nav2 trong môi trường thực. Đây là bước quan trọng để chuyển từ mô phỏng sang ứng dụng thực tế.
 
-\begin{itemize}
-    \item Triển khai trên robot TurtleBot4 thật và đánh giá sai số cảm biến thực tế.
-    \item Đưa waypoint tuần tra ra file YAML để cấu hình linh hoạt.
-    \item Xây dựng Mission Manager theo finite state machine hoặc behavior tree.
-    \item Tối ưu Nav2 costmap, planner và controller cho từng môi trường.
-    \item Thêm multi-object tracking và lọc vị trí mục tiêu theo thời gian.
-    \item Huấn luyện YOLO custom cho các đối tượng chuyên biệt.
-    \item Tích hợp semantic map để robot hiểu thêm ý nghĩa của môi trường.
-    \item Bổ sung logging và tiêu chí định lượng như sai số định vị, thời gian tiếp cận, tỷ lệ phát hiện đúng và độ ổn định navigation.
-\end{itemize}
+Hướng thứ hai là nâng cấp logic nhiệm vụ. Mission Manager có thể được thiết kế lại thành finite state machine hoặc behavior tree. Khi đó robot có thể có nhiều trạng thái rõ ràng hơn như tuần tra, tìm kiếm, phát hiện, xác nhận mục tiêu, tiếp cận, theo dõi, quay lại tuyến tuần tra hoặc xử lý lỗi. Điều này giúp hệ thống dễ mở rộng và dễ kiểm chứng hơn.
+
+Hướng thứ ba là bổ sung logging và tiêu chí định lượng. Thay vì chỉ quan sát bằng mắt trên RViz, hệ thống nên ghi lại thời gian hoàn thành nhiệm vụ, số lần phát hiện đúng, sai số vị trí mục tiêu, số lần Nav2 recovery và độ ổn định của \texttt{/cmd\_vel}. Các số liệu này giúp phần đánh giá có tính khoa học hơn.
+
+\begin{table}[H]
+    \centering
+    \caption{Các hướng phát triển của hệ thống}
+    \label{tab:future-work}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.24\textwidth}|>{\raggedright\arraybackslash}p{0.38\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Hướng phát triển} & \textbf{Nội dung đề xuất} & \textbf{Lợi ích} \\
+        \hline
+        Triển khai robot thật & Chạy hệ thống trên TurtleBot4 thật trong phòng thí nghiệm. & Đánh giá khả năng ứng dụng thực tế. \\
+        \hline
+        Tối ưu Nav2 & Tinh chỉnh costmap, planner, controller và recovery. & Giảm dao động, tăng độ mượt và giảm kẹt cục bộ. \\
+        \hline
+        YOLO custom & Huấn luyện mô hình cho đối tượng chuyên biệt. & Tăng độ chính xác nhận diện trong bài toán cụ thể. \\
+        \hline
+        Tracking mục tiêu & Theo dõi mục tiêu qua nhiều frame. & Giảm dao động pose và xử lý mục tiêu di chuyển. \\
+        \hline
+        Behavior Tree/FSM & Thay Mission Manager đơn giản bằng mô hình hành vi rõ ràng hơn. & Dễ mở rộng và kiểm soát luồng nhiệm vụ. \\
+        \hline
+        Semantic map & Gắn thông tin ngữ nghĩa vào bản đồ. & Robot hiểu môi trường ở mức cao hơn, hỗ trợ ra quyết định. \\
+        \hline
+        Logging định lượng & Ghi dữ liệu và tính chỉ tiêu đánh giá. & Tăng tính thuyết phục cho kết quả thực nghiệm. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    >=Latex,
+    node distance=1cm,
+    roadmapstep/.style={rectangle, draw, fill=blue!10, align=center, minimum height=1cm, text width=3.2cm, font=\small},
+    arrow/.style={->, very thick, draw=orange}
+]
+\node[roadmapstep] (s1) {Giai đoạn 1:\\Mô phỏng Gazebo (Đã hoàn thành)};
+\node[roadmapstep, right=of s1] (s2) {Giai đoạn 2:\\Triển khai trên TurtleBot4 thật};
+\node[roadmapstep, right=of s2] (s3) {Giai đoạn 3:\\Nâng cấp Behavior Tree \& FSM};
+\node[roadmapstep, below=of s3] (s4) {Giai đoạn 4:\\Đánh giá định lượng \& Tracking};
+
+\draw[arrow] (s1) -- (s2);
+\draw[arrow] (s2) -- (s3);
+\draw[arrow] (s3) -- (s4);
+\end{tikzpicture}
+\caption{Lộ trình phát triển từ mô phỏng sang thực tế và nâng cấp hệ thống}
+\label{fig:development-roadmap}
+\end{figure}
 
 \subsection{Kết luận chương}
+\label{subsec:chapter7-conclusion}
 
-Kết quả mô phỏng cho thấy hệ thống đã đáp ứng mục tiêu đề tài ở mức tích hợp chức năng. Robot có thể mô phỏng, thu nhận dữ liệu cảm biến, lập bản đồ, điều hướng, nhận diện mục tiêu và thực hiện hành vi tiếp cận. Các hạn chế hiện tại chủ yếu nằm ở mức tối ưu, đánh giá định lượng và triển khai thực nghiệm trên phần cứng thật.
+Chương này đã phân tích kết quả mô phỏng và đánh giá hệ thống robot tự hành TurtleBot4 theo nhiều khía cạnh: cảm biến, nhận diện, định vị mục tiêu, điều hướng, cơ cấu chấp hành, kiến trúc phần mềm, hạn chế và hướng phát triển. Kết quả cho thấy hệ thống đã đạt mục tiêu tích hợp chức năng ở mức mô phỏng: robot có thể thu nhận dữ liệu cảm biến, lập bản đồ, điều hướng, nhận diện mục tiêu, định vị mục tiêu và thực hiện hành vi tiếp cận.
+
+Tuy nhiên, hệ thống vẫn cần được cải thiện ở các điểm như tối ưu Nav2, tăng độ ổn định depth, xử lý nhiều mục tiêu, đưa waypoint ra cấu hình ngoài, nâng cấp Mission Manager và bổ sung đánh giá định lượng. Những nội dung này là cơ sở để phát triển hệ thống thành một robot tự hành hoàn chỉnh hơn trong môi trường thực tế.

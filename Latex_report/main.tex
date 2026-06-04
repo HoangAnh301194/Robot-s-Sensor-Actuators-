@@ -1,14 +1,14 @@
-﻿\documentclass{article}
+\documentclass{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T5]{fontenc}
 \usepackage[fontsize=13pt]{scrextend}
-\usepackage[paperheight=29.7cm,paperwidth=21cm,right=2cm,left=3cm,top=2cm,bottom=2.5cm,twoside]{geometry}
+\usepackage[paperheight=29.7cm,paperwidth=21cm,right=2cm,left=3cm,top=2cm,bottom=2.5cm]{geometry}
 \usepackage{mathptmx}
 \usepackage{amsmath,amssymb,bm}
-\usepackage{graphicx,float,tikz}
-\usetikzlibrary{calc,arrows.meta,positioning}
-\usepackage{multicol,multirow,tabularx,longtable,booktabs,array}
 \usepackage[table]{xcolor}
+\usepackage{graphicx,float,tikz}
+\usetikzlibrary{calc,arrows.meta,positioning,shapes.geometric}
+\usepackage{multicol,multirow,tabularx,longtable,booktabs,array,calc}
 \usepackage{listings}
 \usepackage[font=bf]{caption}
 \usepackage{enumitem}
@@ -35,6 +35,7 @@
 \setcounter{secnumdepth}{4}
 \titleformat{\section}[hang]{\normalfont\fontsize{16pt}{19.2pt}\selectfont\bfseries\centering}{\thesection.}{1em}{}
 \titlespacing*{\section}{0pt}{3.5ex plus 1ex minus .2ex}{2.3ex plus .2ex}
+\newcommand{\sectionbreak}{\clearpage}
 \titleformat*{\subsection}{\fontsize{14pt}{16.8pt}\selectfont\bfseries}
 \titleformat*{\subsubsection}{\fontsize{13pt}{15.6pt}\selectfont\bfseries\itshape}
 \renewcommand{\baselinestretch}{1.2}
@@ -53,6 +54,7 @@
 \renewcommand{\contentsname}{MỤC LỤC}
 
 \begin{document}
+\sloppy
 \renewcommand{\labelitemi}{--}
 \renewcommand{\labelitemii}{-}
 \input{cover}

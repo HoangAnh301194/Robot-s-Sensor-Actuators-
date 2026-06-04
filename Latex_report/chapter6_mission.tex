@@ -1,83 +1,832 @@
-﻿\section{TRIỂN KHAI NHIỆM VỤ TỰ HÀNH}
+\providecommand{\placeholderfigure}[3]{%
+    \begin{figure}[H]
+        \centering
+        \fbox{%
+            \parbox[c][4.0cm][c]{0.88\textwidth}{%
+                \centering
+                \textit{#1}%
+            }%
+        }
+        \caption{#2}
+        \label{#3}
+    \end{figure}
+}
+
+\section{TRIỂN KHAI NHIỆM VỤ TỰ HÀNH}
+\label{sec:autonomous-mission-deployment}
+
+Chương này trình bày cách hệ thống TurtleBot4 được triển khai thành một nhiệm vụ tự hành hoàn chỉnh trong môi trường mô phỏng. Khác với các chương trước tập trung vào cơ sở lý thuyết, kiến trúc và từng khối kỹ thuật riêng lẻ, nội dung chương này đi theo trình tự vận hành thực tế của hệ thống: khởi động mô phỏng, tạo bản đồ, điều hướng, tuần tra, nhận diện mục tiêu, định vị mục tiêu, điều phối hành vi và kiểm tra các topic quan trọng.
+
+Mục tiêu của chương là làm rõ một câu hỏi chính: từ các package ROS2 đã thiết kế, robot được chạy như thế nào để có thể tuần tra, phát hiện người hoặc vật thể mục tiêu, tính vị trí mục tiêu trong không gian và tiếp cận mục tiêu ở khoảng cách an toàn. Vì vậy, chương này tập trung nhiều vào quy trình, dữ liệu vào/ra, trạng thái hệ thống và cách các node phối hợp với nhau trong quá trình chạy.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.5cm and 2cm,
+    block/.style={rectangle, draw, rounded corners, fill=blue!10, align=center, minimum width=2.5cm, minimum height=1cm, text width=2.8cm},
+    arrow/.style={-{Stealth[length=2.5mm]}, thick}
+]
+\node[block, fill=green!10] (start) {Khởi động\\Mô phỏng};
+\node[block, right=of start] (mapping) {SLAM /\\Bản đồ};
+\node[block, right=of mapping] (patrol) {Tuần tra\\(Nav2)};
+\node[block, fill=orange!10, below=of patrol] (detect) {Nhận diện \&\\Định vị mục tiêu};
+\node[block, fill=red!10, left=of detect] (approach) {Tiếp cận an toàn\\(Mission Manager)};
+
+\draw[arrow] (start) -- (mapping);
+\draw[arrow] (mapping) -- (patrol);
+\draw[arrow] (patrol) -- node[right, align=left] {Song song\\quan sát} (detect);
+\draw[arrow] (detect) -- node[above] {Có mục tiêu} (approach);
+\draw[arrow] (approach) -- node[sloped, above] {Hoàn thành} (patrol);
+\end{tikzpicture}
+\caption{Quy trình tổng quát triển khai nhiệm vụ tự hành TurtleBot4}
+\label{fig:autonomous-mission-overview}
+\end{figure}
 
 \subsection{Mục tiêu nhiệm vụ}
+\label{subsec:mission-objective}
 
-Nhiệm vụ tự hành trong đề tài được thiết kế theo kịch bản: robot tuần tra trong môi trường mô phỏng, quan sát bằng camera RGB-D, phát hiện mục tiêu bằng YOLOv8, định vị mục tiêu trong không gian 3D, tạm dừng tuần tra, tiếp cận mục tiêu ở khoảng cách an toàn và sau đó quay lại chế độ tuần tra.
+Nhiệm vụ tự hành trong project được xây dựng theo kịch bản tuần tra và phản ứng với mục tiêu. Robot ban đầu di chuyển theo các waypoint đã định trước trong bản đồ. Trong quá trình tuần tra, camera RGB-D liên tục quan sát môi trường, YOLOv8n phát hiện đối tượng trong ảnh RGB, node định vị mục tiêu dùng ảnh depth để tính tọa độ 3D, sau đó Mission Manager quyết định có tạm dừng tuần tra và gửi goal tiếp cận mục tiêu hay không.
 
-Kịch bản này phù hợp với các ứng dụng như robot giám sát kho hàng, robot tuần tra văn phòng, robot hỗ trợ tìm kiếm hoặc robot dịch vụ có khả năng phản ứng với đối tượng trong môi trường.
+Kịch bản này thể hiện đầy đủ chuỗi hoạt động của robot tự hành: cảm biến thu dữ liệu, thuật toán xử lý biến dữ liệu thành thông tin trạng thái, bộ điều phối chuyển thông tin thành quyết định hành vi, Nav2 biến quyết định thành lệnh di chuyển và cơ cấu chấp hành thực thi chuyển động.
+
+\subsubsection{Yêu cầu chức năng của nhiệm vụ}
+\label{subsubsec:mission-functional-requirements}
+
+\begin{table}[H]
+    \centering
+    \caption{Yêu cầu chức năng của nhiệm vụ tự hành}
+    \label{tab:mission-functional-requirements}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.31\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Yêu cầu} & \textbf{Mô tả} \\
+        \hline
+        Khởi động môi trường mô phỏng & TurtleBot4 Lite phải được spawn trong Gazebo/Ignition với pose ban đầu xác định. \\
+        \hline
+        Thu dữ liệu cảm biến & Hệ thống phải có dữ liệu \texttt{/scan}, \texttt{/odom}, TF, ảnh RGB, ảnh depth và \texttt{camera\_info}. \\
+        \hline
+        Xây dựng hoặc sử dụng bản đồ & SLAM Toolbox dùng LiDAR và odometry để tạo bản đồ hoặc localization dùng bản đồ đã lưu. \\
+        \hline
+        Điều hướng theo waypoint & Patrol Node gửi tuần tự các điểm tuần tra đến Nav2 thông qua action \texttt{NavigateToPose}. \\
+        \hline
+        Nhận diện mục tiêu & YOLOv8n phát hiện đối tượng trên ảnh RGB và publish \texttt{Detection2DArray}. \\
+        \hline
+        Định vị mục tiêu & Object Localization dùng bbox, depth và camera intrinsic để tính pose 3D. \\
+        \hline
+        Tiếp cận an toàn & Mission Manager tính goal cách mục tiêu một khoảng an toàn rồi gửi đến Nav2. \\
+        \hline
+        Quay lại tuần tra & Sau khi tiếp cận hoặc hết thời gian chờ, robot bật lại chế độ tuần tra. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\subsubsection{Input và output của toàn nhiệm vụ}
+\label{subsubsec:mission-io}
+
+\begin{table}[H]
+    \centering
+    \caption{Input và output của toàn nhiệm vụ tự hành}
+    \label{tab:mission-io}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.25\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Loại} & \textbf{Nội dung} \\
+        \hline
+        Input chính & Mô hình robot TurtleBot4 Lite, môi trường warehouse, dữ liệu LiDAR, camera RGB-D, odometry, TF, bản đồ hoặc dữ liệu SLAM, danh sách waypoint, tham số khoảng cách an toàn. \\
+        \hline
+        Output trung gian & Bản đồ occupancy grid, pose robot, detection 2D, pose mục tiêu 3D, marker hiển thị RViz, trạng thái \texttt{patrol\_enabled}. \\
+        \hline
+        Output cuối & Robot di chuyển theo waypoint, phát hiện mục tiêu, tiếp cận mục tiêu ở khoảng cách an toàn và quay lại tuần tra. \\
+        \hline
+    \end{tabularx}
+\end{table}
 
 \subsection{Quy trình khởi động hệ thống}
+\label{subsec:system-startup}
 
-Hệ thống được khởi động theo hai bước chính. Trước hết, mô phỏng TurtleBot4 được launch trong Gazebo/Ignition. Sau đó, launch tổng hợp \texttt{sim\_demo.launch.py} được sử dụng để chạy Nav2, localization, vision, object localization, patrol và mission manager.
+Hệ thống được khởi động theo hai lớp. Lớp thứ nhất là mô phỏng robot và môi trường trong Gazebo/Ignition. Lớp thứ hai là các node ROS2 phục vụ navigation, perception, localization, patrol và mission management. Việc tách hai bước này giúp dễ kiểm tra lỗi: nếu robot chưa spawn hoặc cảm biến chưa có dữ liệu, cần xử lý ở lớp mô phỏng; nếu cảm biến đã có dữ liệu nhưng robot chưa thực hiện nhiệm vụ, cần kiểm tra ở lớp ROS2.
 
-\begin{lstlisting}[caption={Lệnh khởi động mô phỏng TurtleBot4}]
+\subsubsection{Bước 1: Khởi động mô phỏng TurtleBot4}
+\label{subsubsec:start-simulation}
+
+Trước khi chạy mission, workspace cần được source đúng môi trường ROS2 và package của project. Các biến môi trường như \texttt{ROS\_DOMAIN\_ID} và \texttt{RMW\_FASTRTPS\_USE\_SHM} giúp bảo đảm các node trong cùng hệ thống có thể phát hiện nhau và giảm lỗi shared memory trong một số môi trường máy ảo hoặc WSL.
+
+\begin{lstlisting}[language=bash]
 cd ~/tb4_project_ab
 export ROS_DOMAIN_ID=7
 export RMW_FASTRTPS_USE_SHM=0
 source /opt/ros/humble/setup.bash
 source install/setup.bash
+\end{lstlisting}
 
+Sau đó khởi động mô phỏng TurtleBot4 Lite trong world warehouse:
+
+\begin{lstlisting}[language=bash]
 ros2 launch turtlebot4_ignition_bringup turtlebot4_ignition.launch.py \
   model:=lite world:=warehouse x:=2.0 y:=0.0 z:=0.01 yaw:=0.0
 \end{lstlisting}
 
-\begin{lstlisting}[caption={Lệnh chạy full mission}]
-cd ~/tb4_project_ab
-export ROS_DOMAIN_ID=7
-export RMW_FASTRTPS_USE_SHM=0
-source /opt/ros/humble/setup.bash
-source install/setup.bash
+Các tham số \texttt{x}, \texttt{y}, \texttt{z} và \texttt{yaw} xác định vị trí và hướng ban đầu của robot trong môi trường mô phỏng. Trong project này, robot được đặt tại vị trí \texttt{x = 2.0}, \texttt{y = 0.0}, \texttt{z = 0.01} và \texttt{yaw = 0.0} để bảo đảm robot xuất hiện ổn định trên mặt sàn warehouse.
 
+\subsubsection{Bước 2: Chạy full mission}
+\label{subsubsec:run-full-mission}
+
+Khi robot đã được spawn, launch file tổng hợp \texttt{sim\_demo.launch.py} được dùng để chạy các thành phần còn lại của hệ thống. Launch file này giúp giảm thao tác thủ công vì người dùng không cần mở riêng từng node YOLO, object localization, patrol, mission manager và RViz.
+
+\begin{lstlisting}[language=bash]
 ros2 launch tb4_bringup sim_demo.launch.py use_rviz:=true
 \end{lstlisting}
 
+Nếu \texttt{use\_rviz:=true}, RViz được mở để quan sát robot, map, LaserScan, TF, marker mục tiêu và trạng thái navigation. Đây là công cụ quan trọng để kiểm tra trực quan quá trình vận hành.
+
+\subsubsection{Input, output và điểm cần kiểm tra khi khởi động}
+\label{subsubsec:startup-check}
+
+\begin{table}[H]
+    \centering
+    \caption{Input, output và điểm cần kiểm tra khi khởi động hệ thống}
+    \label{tab:startup-check}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.18\textwidth}|>{\raggedright\arraybackslash}p{0.25\textwidth}|>{\raggedright\arraybackslash}p{0.26\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Khối} & \textbf{Input} & \textbf{Output cần có} & \textbf{Ý nghĩa kiểm tra} \\
+        \hline
+        Gazebo/Ignition & World warehouse, model TurtleBot4 Lite, pose ban đầu. & Robot xuất hiện trong mô phỏng, có clock mô phỏng. & Xác nhận môi trường và robot đã chạy. \\
+        \hline
+        LiDAR & Mô hình cảm biến LiDAR trong robot. & Topic \texttt{/scan} có dữ liệu \texttt{LaserScan}. & Là điều kiện đầu vào cho SLAM và costmap. \\
+        \hline
+        Camera RGB-D & Mô hình camera OAK-D trong robot. & Ảnh RGB, depth và \texttt{camera\_info}. & Là điều kiện đầu vào cho YOLO và định vị mục tiêu. \\
+        \hline
+        Nav2 & Map, TF, odometry, scan, goal. & Action \texttt{NavigateToPose}, lệnh \texttt{/cmd\_vel}. & Cho biết robot có thể nhận goal và điều hướng. \\
+        \hline
+        Mission Manager & Pose mục tiêu, trạng thái patrol, TF. & Tín hiệu tạm dừng tuần tra và goal tiếp cận. & Cho biết hệ thống có thể chuyển hành vi khi phát hiện mục tiêu. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    box/.style={draw, rectangle, rounded corners, align=center, minimum width=2.8cm, minimum height=1.2cm},
+    >=Latex
+]
+% Layer 1: Simulation
+\node[draw, fill=gray!10, minimum width=13cm, minimum height=3cm, dashed] (layer1) at (0, 0) {};
+\node[anchor=north west, font=\bfseries] at (layer1.north west) {Lớp 1: Mô phỏng (Gazebo/Ignition)};
+\node[box, fill=white] (world) at (-3.5, -0.5) {World\\(Warehouse)};
+\node[box, fill=white] (robot) at (3.5, -0.5) {Robot Model\\(TB4 Lite)};
+\draw[<->, thick] (world) -- (robot);
+
+% Layer 2: ROS2
+\node[draw, fill=blue!5, minimum width=13cm, minimum height=4cm, dashed] (layer2) at (0, -6.75) {};
+\node[anchor=south west, font=\bfseries] at (layer2.south west) {Lớp 2: ROS2 Mission Nodes};
+\node[box, fill=white] (nav) at (-4, -7) {Nav2 \& SLAM};
+\node[box, fill=white] (vision) at (0, -7) {YOLOv8 \&\\Localization};
+\node[box, fill=white] (mission) at (4, -7) {Patrol \&\\Mission Mgr};
+
+% Connections
+% LiDAR, Odom
+\draw[->, thick, blue] ([xshift=-1.0cm]robot.south) -- ([xshift=-1.0cm]robot.south |- 0,-2.0) -- node[above, align=center, font=\footnotesize] {LiDAR,\\Odom} ([xshift=-0.5cm]nav.north |- 0,-2.0) -- ([xshift=-0.5cm]nav.north);
+
+% RGB-D
+\draw[->, thick, blue] (robot.south) -- (robot.south |- 0,-3.0) -- node[above, align=center, font=\footnotesize] {RGB-D\\Camera} (vision.north |- 0,-3.0) -- (vision.north);
+
+% cmd_vel
+\draw[->, thick, red] ([xshift=0.5cm]nav.north) -- ([xshift=0.5cm]nav.north |- 0,-4.0) -- node[above, font=\footnotesize] {\texttt{/cmd\_vel}} ([xshift=1.0cm]robot.south |- 0,-4.0) -- ([xshift=1.0cm]robot.south);
+
+% Inter-node connections in Layer 2
+% Pose 3D
+\draw[->, thick, green!50!black] (vision.east) -- node[above, font=\footnotesize] {Pose 3D} (mission.west);
+
+% Nav Goal
+\draw[->, thick, green!50!black] (mission.south) -- (mission.south |- 0,-8.1) -- node[below, font=\footnotesize] {Nav Goal} ([xshift=0.5cm]nav.south |- 0,-8.1) -- ([xshift=0.5cm]nav.south);
+
+\end{tikzpicture}
+\caption{Hai lớp khởi động hệ thống gồm mô phỏng Gazebo/Ignition và các node ROS2 mission}
+\label{fig:two-layer-startup}
+\end{figure}
+
 \subsection{SLAM và bản đồ môi trường}
+\label{subsec:slam-map}
 
-Trong giai đoạn mapping, SLAM Toolbox sử dụng dữ liệu \texttt{/scan}, odometry và TF để xây dựng occupancy grid map. Mỗi ô trong bản đồ biểu diễn xác suất bị chiếm bởi vật cản. Bản đồ sau khi tạo được lưu lại và dùng cho giai đoạn localization/navigation.
+Trong nhiệm vụ tự hành, robot cần biết vị trí của mình tương đối với môi trường. Nếu chưa có bản đồ, hệ thống sử dụng SLAM Toolbox để xây dựng occupancy grid map từ dữ liệu LiDAR, odometry và TF. Nếu đã có bản đồ, robot có thể chuyển sang chế độ localization để định vị trên bản đồ đã lưu và dùng Nav2 để điều hướng.
 
-Các tham số quan trọng trong cấu hình SLAM gồm:
+Occupancy grid map biểu diễn môi trường thành các ô lưới. Mỗi ô có thể được hiểu là một vùng nhỏ ngoài đời thực với kích thước phụ thuộc vào độ phân giải bản đồ. Trong cấu hình của project, độ phân giải thường dùng là $0.05\,\mathrm{m}$, nghĩa là mỗi ô trên bản đồ tương ứng với $5\,\mathrm{cm}$ trong môi trường mô phỏng.
 
-\begin{itemize}
-    \item \texttt{resolution: 0.05}: độ phân giải bản đồ 5 cm mỗi ô.
-    \item \texttt{min\_laser\_range: 0.2}: loại bỏ đo quá gần.
-    \item \texttt{max\_laser\_range: 12.0}: giới hạn tầm đo LiDAR.
-    \item \texttt{do\_loop\_closing: true}: cho phép phát hiện đóng vòng để giảm sai số tích lũy.
-    \item \texttt{use\_scan\_matching: true}: dùng scan matching để cải thiện ước lượng pose.
-\end{itemize}
+\subsubsection{Dữ liệu vào và dữ liệu ra của quá trình SLAM}
+\label{subsubsec:slam-io}
+
+\begin{table}[H]
+    \centering
+    \caption{Dữ liệu vào và dữ liệu ra của quá trình SLAM}
+    \label{tab:slam-io}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.23\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Thành phần} & \textbf{Vai trò trong SLAM} \\
+        \hline
+        \texttt{/scan} & Cung cấp khoảng cách từ robot đến vật cản theo nhiều góc quét. Đây là dữ liệu chính để tạo biên vật cản trong bản đồ. \\
+        \hline
+        \texttt{/odom} & Cung cấp ước lượng chuyển động tương đối của robot giữa các thời điểm. \\
+        \hline
+        TF & Liên kết các frame \texttt{map}, \texttt{odom}, \texttt{base\_link} và \texttt{rplidar\_link} để dữ liệu quét được đặt đúng vị trí trong không gian. \\
+        \hline
+        SLAM Toolbox & Thực hiện scan matching, cập nhật pose graph, phát hiện loop closure và publish map. \\
+        \hline
+        \texttt{/map} & Output của SLAM, biểu diễn môi trường dưới dạng occupancy grid. \\
+        \hline
+        \texttt{map -> odom} & Transform giúp liên hệ hệ tọa độ bản đồ với hệ tọa độ odometry. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\subsubsection{Cách quy đổi vị trí thực sang ô bản đồ}
+\label{subsubsec:world-to-grid}
+
+Khi bản đồ được chia thành lưới, một điểm trong môi trường có tọa độ thực $(x,y)$ sẽ được quy đổi sang chỉ số ô bản đồ. Gọi $r$ là độ phân giải bản đồ, $x_0$ và $y_0$ là gốc bản đồ, chỉ số ô có thể viết:
+
+\begin{align}
+    i &= \left\lfloor \frac{x-x_0}{r} \right\rfloor, \label{eq:grid-index-i}\\
+    j &= \left\lfloor \frac{y-y_0}{r} \right\rfloor. \label{eq:grid-index-j}
+\end{align}
+
+Trong đó, $i$ và $j$ là chỉ số hàng/cột của ô bản đồ. Nếu $r=0.05\,\mathrm{m}$, một đoạn $1\,\mathrm{m}$ trong môi trường thật sẽ tương ứng với $20$ ô bản đồ. Nhờ cách biểu diễn này, thuật toán điều hướng có thể lập kế hoạch đường đi trên bản đồ số thay vì xử lý trực tiếp toàn bộ không gian liên tục.
+
+\subsubsection{Các tham số SLAM quan trọng}
+\label{subsubsec:slam-parameters}
+
+\begin{table}[H]
+    \centering
+    \caption{Các tham số SLAM quan trọng}
+    \label{tab:slam-parameters}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.29\textwidth}|>{\raggedright\arraybackslash}p{0.20\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Tham số} & \textbf{Giá trị thường dùng} & \textbf{Ý nghĩa} \\
+        \hline
+        \texttt{resolution} & \texttt{0.05} & Độ phân giải bản đồ, mỗi ô tương ứng $5\,\mathrm{cm}$. \\
+        \hline
+        \texttt{min\_laser\_range} & \texttt{0.2} & Loại bỏ các điểm đo quá gần robot, thường dễ nhiễu hoặc nằm trên thân robot. \\
+        \hline
+        \texttt{max\_laser\_range} & \texttt{12.0} & Giới hạn khoảng cách đo xa nhất của LiDAR được dùng trong SLAM. \\
+        \hline
+        \texttt{map\_update\_interval} & \texttt{2.0 s} & Chu kỳ cập nhật bản đồ. \\
+        \hline
+        \texttt{use\_scan\_matching} & \texttt{true} & So khớp các lần quét LiDAR liên tiếp để cải thiện pose. \\
+        \hline
+        \texttt{do\_loop\_closing} & \texttt{true} & Phát hiện robot quay lại vùng đã đi qua để giảm sai số tích lũy. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.8, every node/.style={transform shape}]
+% Grid
+\draw[step=1cm,gray!30,very thin] (-3,-3) grid (3,3);
+% Occupied cells
+\fill[black!70] (1,1) rectangle (2,2);
+\fill[black!70] (2,1) rectangle (3,2);
+\fill[black!70] (-2,2) rectangle (-1,3);
+\fill[black!70] (-2,-2) rectangle (-1,-1);
+
+% Robot
+\filldraw[blue!50] (0,0) circle (0.3);
+\draw[->, thick] (0,0) -- (0.5,0); % heading
+
+% Lidar rays
+\foreach \angle in {0, 30, 60, ..., 330} {
+    \draw[red, dashed, thin] (0,0) -- (\angle:1.2);
+}
+% Ray hitting obstacle
+\draw[red, thick] (0,0) -- (45:1.414);
+\fill[red] (45:1.414) circle (2pt);
+
+% Labels
+\node[anchor=north] at (0,-3.2) {Free Space (Trắng)};
+\node[anchor=west] at (3.2, 1.5) {Vật cản (Đen)};
+\node[anchor=east] at (-3.2, 0) {Grid map ($5\,\text{cm/ô}$)};
+\end{tikzpicture}
+\caption{Minh họa occupancy grid map và tia LiDAR quét trúng vật cản}
+\label{fig:occupancy-grid-lidar}
+\end{figure}
 
 \subsection{Navigation và tuần tra}
+\label{subsec:navigation-patrol}
 
-Sau khi có bản đồ, Nav2 được dùng để điều hướng. Patrol Node gửi các goal tuần tra tuần tự đến action server \texttt{navigate\_to\_pose}. Trạng thái goal được kiểm tra thông qua \texttt{GoalStatus}. Nếu goal thành công, robot chuyển sang waypoint tiếp theo; nếu bị hủy bởi Mission Manager, node dừng tuần tra tạm thời.
+Sau khi có bản đồ và pose robot, Nav2 được dùng để điều hướng robot đến các điểm đích. Trong project, hành vi tuần tra được tạo bởi Patrol Node. Node này không tự điều khiển bánh xe, mà gửi từng waypoint đến Nav2 bằng action \texttt{NavigateToPose}. Nav2 chịu trách nhiệm lập đường, điều khiển cục bộ, tránh vật cản và phát lệnh vận tốc.
 
-Việc sử dụng action thay vì topic đơn giản giúp quá trình điều hướng có phản hồi rõ ràng: goal được chấp nhận hay từ chối, đang chạy hay đã hoàn thành. Đây là thiết kế phù hợp cho hệ robot tự hành vì navigation là quá trình kéo dài theo thời gian, không phải một lệnh tức thời.
+\subsubsection{Mô hình waypoint tuần tra}
+\label{subsubsec:patrol-waypoint-model}
+
+Mỗi waypoint có thể mô tả bởi một pose trong frame \texttt{map}:
+
+\begin{equation}
+    \mathbf{P}_k = (x_k,\, y_k,\, \theta_k)
+    \label{eq:patrol-waypoint-pose}
+\end{equation}
+
+Trong đó, $x_k$ và $y_k$ là tọa độ điểm tuần tra thứ $k$, còn $\theta_k$ là hướng quay mong muốn của robot tại điểm đó. Danh sách waypoint trong báo cáo gốc gồm bốn điểm tạo thành một chu trình đơn giản:
+
+\begin{equation}
+    \mathbf{P}_1=(1.0,0.0),\quad
+    \mathbf{P}_2=(1.0,1.0),\quad
+    \mathbf{P}_3=(0.0,1.0),\quad
+    \mathbf{P}_4=(0.0,0.0)
+    \label{eq:patrol-waypoint-list}
+\end{equation}
+
+Khi Nav2 báo goal hiện tại đã hoàn thành, Patrol Node tăng chỉ số waypoint và gửi waypoint tiếp theo. Khi đến waypoint cuối cùng, chỉ số được đưa về điểm đầu để tạo vòng tuần tra lặp lại.
+
+\subsubsection{Điều kiện hoàn thành waypoint}
+\label{subsubsec:waypoint-completion}
+
+Về mặt logic, một waypoint được xem là hoàn thành khi robot đến đủ gần vị trí đích và góc quay nằm trong ngưỡng cho phép. Khoảng cách giữa robot và waypoint có thể tính:
+
+\begin{equation}
+    e_p
+    =
+    \sqrt{(x_g-x_r)^2+(y_g-y_r)^2}
+    \label{eq:waypoint-position-error}
+\end{equation}
+
+Trong đó, $(x_r,y_r)$ là vị trí hiện tại của robot và $(x_g,y_g)$ là vị trí goal. Nếu $e_p$ nhỏ hơn một ngưỡng sai số cho phép, Nav2 có thể xem robot đã tới vùng đích. Phần kiểm tra chi tiết thường do controller và action server của Nav2 xử lý, Patrol Node chỉ nhận kết quả thành công, thất bại hoặc bị hủy.
+
+\subsubsection{Trạng thái của Patrol Node}
+\label{subsubsec:patrol-node-states}
+
+\begin{table}[H]
+    \centering
+    \caption{Các trạng thái chính của Patrol Node}
+    \label{tab:patrol-node-states}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.31\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Trạng thái} & \textbf{Mô tả} \\
+        \hline
+        Chờ Nav2 sẵn sàng & Node kiểm tra action server \texttt{NavigateToPose} trước khi gửi goal. \\
+        \hline
+        Gửi waypoint & Waypoint hiện tại được đóng gói thành goal và gửi đến Nav2. \\
+        \hline
+        Đang tuần tra & Robot di chuyển đến waypoint, Patrol Node chờ feedback/result. \\
+        \hline
+        Hoàn thành waypoint & Node chuyển sang waypoint tiếp theo. \\
+        \hline
+        Bị Mission Manager tạm dừng & Nếu \texttt{patrol\_enabled = false}, goal hiện tại bị hủy để nhường quyền cho Mission Manager. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    >=Latex,
+    node distance=3.5cm,
+    block/.style={rectangle, draw, fill=cyan!10, align=center, minimum height=1.5cm, minimum width=3cm}
+]
+\node[block] (patrol) {Patrol Node\\(Quản lý waypoint)};
+\node[block, right=of patrol] (nav2) {Nav2\\(Điều hướng \& di chuyển)};
+
+\draw[->, thick] (patrol.20) -- node[above, font=\small] {Action Goal: \texttt{NavigateToPose}} (nav2.160);
+\draw[<-, thick] (patrol.340) -- node[below, font=\small] {Result: Thành công/Thất bại} (nav2.200);
+\draw[->, thick, dashed] (nav2.south) -- +(0,-1) node[below] {\texttt{/cmd\_vel}};
+\draw[<-, thick, dashed] (patrol.north) -- +(0,1) node[above] {Tín hiệu tạm dừng từ Mission Manager};
+\end{tikzpicture}
+\caption{Sơ đồ Patrol Node gửi tuần tự waypoint đến Nav2}
+\label{fig:patrol-node-nav2}
+\end{figure}
 
 \subsection{Nhận diện và định vị mục tiêu}
+\label{subsec:detection-localization}
 
-Node YOLOv8 xử lý ảnh RGB theo thời gian thực và publish detection. Node localization chọn detection phù hợp, lấy depth trung vị tại vùng tâm bbox để giảm nhiễu, sau đó tính pose tương đối. Marker được hiển thị trên RViz giúp kiểm tra trực quan vị trí mục tiêu.
+Trong khi robot tuần tra, hệ thống perception chạy song song. YOLOv8n xử lý ảnh RGB để phát hiện đối tượng, còn Object Localization dùng ảnh depth và thông số camera để biến bounding box 2D thành vị trí 3D. Đây là bước biến thông tin thị giác thành thông tin có thể dùng cho navigation.
 
-Quy trình này minh họa rõ sự kết hợp giữa cảm biến thị giác và cảm biến chiều sâu. Nếu chỉ dùng ảnh RGB, hệ thống chỉ biết mục tiêu nằm ở đâu trên ảnh. Nếu chỉ dùng depth, hệ thống không biết điểm nào là mục tiêu. Khi kết hợp RGB, YOLO và depth, robot có thể chuyển thông tin ngữ nghĩa thành tọa độ không gian.
+\subsubsection{Luồng xử lý nhận diện}
+\label{subsubsec:detection-flow}
+
+\begin{table}[H]
+    \centering
+    \caption{Luồng xử lý nhận diện và định vị mục tiêu}
+    \label{tab:detection-localization-flow}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\centering\arraybackslash}p{0.08\textwidth}|>{\raggedright\arraybackslash}p{0.26\textwidth}|>{\raggedright\arraybackslash}p{0.35\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Bước} & \textbf{Input} & \textbf{Xử lý} & \textbf{Output} \\
+        \hline
+        1 & Ảnh RGB từ \texttt{/oakd/rgb/preview/}\newline\texttt{image\_raw} & YOLOv8n chạy inference trên từng frame ảnh. & Danh sách detection 2D. \\
+        \hline
+        2 & Detection 2D & Lọc theo confidence và ưu tiên class \texttt{person} nếu có. & Bounding box mục tiêu. \\
+        \hline
+        3 & Bounding box và ảnh depth & Lấy tâm bbox, đọc depth tại vùng lân cận và dùng median để giảm nhiễu. & Độ sâu $Z$ hợp lệ. \\
+        \hline
+        4 & $Z$ và \texttt{CameraInfo} & Dùng mô hình pinhole để tính tọa độ 3D trong hệ camera. & Pose mục tiêu tương đối với camera. \\
+        \hline
+        5 & Pose camera và TF & Chuyển pose mục tiêu sang frame \texttt{map} nếu cần. & Pose mục tiêu phục vụ Mission Manager. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\subsubsection{Công thức tính tọa độ 3D từ RGB-D}
+\label{subsubsec:rgbd-target-position}
+
+Gọi $(u,v)$ là tâm bounding box trên ảnh, $Z$ là độ sâu tại vùng tâm bbox, $f_x$, $f_y$ là tiêu cự theo pixel, $c_x$, $c_y$ là tọa độ tâm ảnh. Tọa độ mục tiêu trong hệ camera được tính theo mô hình pinhole:
+
+\begin{align}
+    X_c &= \frac{(u-c_x)Z}{f_x}, \label{eq:mission-xc}\\
+    Y_c &= \frac{(v-c_y)Z}{f_y}, \label{eq:mission-yc}\\
+    Z_c &= Z. \label{eq:mission-zc}
+\end{align}
+
+Trong triển khai, không nên lấy duy nhất một pixel depth vì ảnh depth có thể có nhiễu hoặc điểm mất dữ liệu. Cách dùng trung vị trong một cửa sổ nhỏ quanh tâm bbox giúp giá trị $Z$ ổn định hơn:
+
+\begin{equation}
+    Z
+    =
+    \operatorname{median}
+    \left\{
+        D(u+\Delta u,\,v+\Delta v)
+    \right\}
+    \label{eq:mission-median-depth}
+\end{equation}
+
+Trong đó, $D$ là ảnh depth, còn $\Delta u$ và $\Delta v$ là các độ lệch pixel nằm trong cửa sổ lân cận tâm bbox. Nếu $Z$ không hợp lệ, node định vị mục tiêu không nên publish pose để tránh Mission Manager nhận sai vị trí.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    >=Latex,
+    block/.style={rectangle, draw, rounded corners, fill=yellow!10, align=center, minimum height=1cm, text width=2.5cm},
+    data/.style={rectangle, draw, fill=white, align=center, minimum height=0.8cm, text width=2.5cm, dashed}
+]
+\node[data] (rgb) at (0, 0) {Ảnh RGB};
+\node[block] (yolo) at (4, 0) {YOLOv8n};
+\node[data] (bbox) at (8, 0) {BBox 2D};
+
+\node[data] (depth) at (0, -2) {Ảnh Depth};
+\node[block] (median) at (4, -2) {Lấy Median\\quanh tâm BBox};
+\node[data] (z) at (8, -2) {Độ sâu $Z$};
+
+\node[block, fill=green!10] (pinhole) at (12, -1) {Mô hình Pinhole};
+\node[data] (posecam) at (12, -3) {Pose (Camera Frame)};
+\node[block, fill=cyan!10] (tf) at (12, -5) {TF Transform};
+\node[data] (posemap) at (12, -7) {Pose (Map Frame)};
+
+\draw[->, thick] (rgb) -- (yolo);
+\draw[->, thick] (yolo) -- (bbox);
+\draw[->, thick] (depth) -- (median);
+\draw[->, thick] (bbox.south) -- (median.north east);
+\draw[->, thick] (median) -- (z);
+
+\draw[->, thick] (bbox.east) -- (pinhole.160);
+\draw[->, thick] (z.east) -- (pinhole.200);
+
+\draw[->, thick] (pinhole) -- (posecam);
+\draw[->, thick] (posecam) -- (tf);
+\draw[->, thick] (tf) -- (posemap);
+\end{tikzpicture}
+\caption{Luồng YOLOv8 + depth chuyển bounding box 2D thành pose mục tiêu 3D}
+\label{fig:yolo-depth-to-target-pose}
+\end{figure}
 
 \subsection{Mission Manager}
+\label{subsec:mission-manager}
 
-Mission Manager có trạng thái chính là \texttt{patrolling} và \texttt{approaching\_target}. Khi đang tuần tra, nếu nhận được vị trí mục tiêu hợp lệ và mục tiêu ở xa hơn khoảng cách an toàn, node gửi tín hiệu tạm dừng tuần tra qua \texttt{/mission\_manager/patrol\_enabled}. Sau đó, nó tính goal tiếp cận an toàn và gửi goal này đến Nav2.
+Mission Manager là node điều phối hành vi cấp nhiệm vụ. Node này quyết định khi nào robot tiếp tục tuần tra, khi nào tạm dừng tuần tra và khi nào gửi goal tiếp cận mục tiêu. Điểm quan trọng là Mission Manager không điều khiển trực tiếp động cơ; node chỉ đưa ra quyết định cấp cao và gửi goal cho Nav2.
 
-Sau khi goal tiếp cận kết thúc, Mission Manager đặt thời gian cooldown để tránh phản ứng lặp lại liên tục với cùng mục tiêu, rồi bật lại tuần tra. Thiết kế này tuy đơn giản nhưng đủ thể hiện mô hình điều phối hành vi cơ bản của robot tự hành.
+\subsubsection{Trạng thái chính của Mission Manager}
+\label{subsubsec:mission-manager-states}
+
+\begin{table}[H]
+    \centering
+    \caption{Các trạng thái chính của Mission Manager}
+    \label{tab:mission-manager-states}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.22\textwidth}|>{\raggedright\arraybackslash}p{0.26\textwidth}|>{\raggedright\arraybackslash}p{0.28\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Trạng thái} & \textbf{Điều kiện vào trạng thái} & \textbf{Hành động chính} & \textbf{Điều kiện thoát} \\
+        \hline
+        \texttt{patrolling} & Mặc định khi hệ thống bắt đầu hoặc sau khi hoàn thành tiếp cận. & Cho phép Patrol Node gửi waypoint tuần tra. & Nhận pose mục tiêu hợp lệ và mục tiêu ở xa hơn \texttt{safe\_}\newline\texttt{distance}. \\
+        \hline
+        \texttt{approaching\_}\newline\texttt{target} & Có mục tiêu hợp lệ cần tiếp cận. & Tạm dừng Patrol Node, tính safe goal và gửi goal đến Nav2. & Nav2 hoàn thành goal, thất bại hoặc hết thời gian chờ. \\
+        \hline
+        \texttt{cooldown} & Sau khi kết thúc tiếp cận. & Tạm thời không phản ứng lại ngay với cùng mục tiêu. & Hết thời gian cooldown thì bật lại tuần tra. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\subsubsection{Tính điểm tiếp cận an toàn}
+\label{subsubsec:safe-goal-calculation}
+
+Mission Manager không gửi robot đến đúng tọa độ mục tiêu mà chọn một điểm dừng cách mục tiêu một khoảng an toàn. Gọi vị trí robot và mục tiêu trong frame \texttt{map} là:
+
+\begin{equation}
+    \mathbf{p}_r
+    =
+    \begin{bmatrix}
+        x_r & y_r
+    \end{bmatrix}^{\mathsf{T}},
+    \qquad
+    \mathbf{p}_t
+    =
+    \begin{bmatrix}
+        x_t & y_t
+    \end{bmatrix}^{\mathsf{T}}
+    \label{eq:mission-robot-target-positions}
+\end{equation}
+
+Vector từ robot đến mục tiêu và khoảng cách phẳng được tính:
+
+\begin{equation}
+    \Delta\mathbf{p}
+    =
+    \mathbf{p}_t-\mathbf{p}_r
+    =
+    \begin{bmatrix}
+        x_t-x_r & y_t-y_r
+    \end{bmatrix}^{\mathsf{T}}
+    \label{eq:mission-delta-p}
+\end{equation}
+
+\begin{equation}
+    d
+    =
+    \left\lVert\Delta\mathbf{p}\right\rVert_2
+    =
+    \sqrt{(x_t-x_r)^2+(y_t-y_r)^2}
+    \label{eq:mission-target-distance}
+\end{equation}
+
+Gọi $d_s$ là khoảng cách an toàn. Nếu $d>d_s$, điểm goal được chọn trên đoạn thẳng từ robot đến mục tiêu:
+
+\begin{equation}
+    \alpha
+    =
+    \frac{d-d_s}{d}
+    \label{eq:mission-alpha}
+\end{equation}
+
+\begin{equation}
+    \mathbf{p}_g
+    =
+    \mathbf{p}_r+\alpha\Delta\mathbf{p}
+    \label{eq:mission-safe-goal-vector}
+\end{equation}
+
+Tương đương theo từng tọa độ:
+
+\begin{align}
+    x_g &= x_r+\alpha(x_t-x_r), \label{eq:mission-safe-goal-x}\\
+    y_g &= y_r+\alpha(y_t-y_r). \label{eq:mission-safe-goal-y}
+\end{align}
+
+Nếu $d\leq d_s$, robot đã ở đủ gần mục tiêu nên không cần gửi goal tiếp cận mới. Góc quay tại điểm goal có thể chọn sao cho robot hướng về mục tiêu:
+
+\begin{equation}
+    \theta_g
+    =
+    \operatorname{atan2}(y_t-y_g,\,x_t-x_g)
+    \label{eq:mission-safe-goal-heading}
+\end{equation}
+
+Cách tính này giúp robot tiếp cận mục tiêu mà vẫn giữ khoảng cách an toàn, tránh trường hợp robot đi thẳng vào vị trí người hoặc vật thể được phát hiện.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Latex, scale=1.2]
+% Points
+\coordinate (R) at (0,0);
+\coordinate (T) at (5,2);
+
+% Vectors and Lines
+\draw[dashed, gray] (R) -- (T);
+\draw[->, thick, blue] (R) -- (3.5, 1.4) node[midway, above left] {Robot di chuyển};
+\draw[<->, thick, red] (3.5, 1.4) -- (5, 2) node[midway, below right] {$d_s$ (Safe Dist)};
+
+% Nodes
+\filldraw[black] (R) circle (2pt) node[below] {Robot $\mathbf{p}_r$};
+\filldraw[black] (T) circle (2pt) node[above right] {Mục tiêu $\mathbf{p}_t$};
+\filldraw[red] (3.5, 1.4) circle (2pt) node[above left] {Safe Goal $\mathbf{p}_g$};
+\end{tikzpicture}
+\caption{Mission Manager tính safe goal từ vị trí robot và vị trí mục tiêu}
+\label{fig:mission-manager-safe-goal}
+\end{figure}
+
+\subsubsection{Input và output của Mission Manager}
+\label{subsubsec:mission-manager-io}
+
+\begin{table}[H]
+    \centering
+    \caption{Input và output của Mission Manager}
+    \label{tab:mission-manager-io}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.24\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Mục} & \textbf{Nội dung} \\
+        \hline
+        Input & Pose mục tiêu, TF giữa camera và \texttt{map}, pose hiện tại của robot, trạng thái Nav2, tham số \texttt{safe\_distance}, thời gian cooldown. \\
+        \hline
+        Output & Tín hiệu bật/tắt tuần tra, goal tiếp cận an toàn gửi đến Nav2, trạng thái \texttt{approaching} hoặc \texttt{patrolling}. \\
+        \hline
+        Điều kiện xử lý & Chỉ tiếp cận khi pose mục tiêu hợp lệ, TF sẵn sàng và khoảng cách đến mục tiêu lớn hơn \texttt{safe\_distance}. \\
+        \hline
+        Vai trò & Chuyển đổi dữ liệu perception thành hành vi tự hành cấp cao. \\
+        \hline
+    \end{tabularx}
+\end{table}
 
 \subsection{Các topic kiểm tra quan trọng}
+\label{subsec:important-topics}
 
-Trong quá trình vận hành, các topic sau cần được kiểm tra để đánh giá hệ thống:
+Trong quá trình chạy hệ thống, việc kiểm tra topic giúp xác định lỗi nằm ở cảm biến, perception, localization, navigation hay mission logic. Nếu một topic không có dữ liệu, các node phía sau trong pipeline có thể không hoạt động đúng.
 
-\begin{lstlisting}[caption={Các lệnh kiểm tra topic chính}]
-ros2 topic echo /scan --once
-ros2 topic echo /odom --once
-ros2 topic echo /clock --once
-ros2 topic echo /vision/detected_objects --once
-ros2 topic echo /target_object_pose_map --once
-ros2 topic echo /target_object_marker --once
-\end{lstlisting}
+\begin{table}[H]
+    \centering
+    \caption{Các topic và lệnh kiểm tra quan trọng}
+    \label{tab:important-topics}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.39\textwidth}|>{\raggedright\arraybackslash}p{0.24\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Topic/lệnh kiểm tra} & \textbf{Ý nghĩa} & \textbf{Kết quả mong muốn} \\
+        \hline
+        \texttt{ros2 topic echo /scan --once} & Kiểm tra dữ liệu LiDAR. & Có bản tin \texttt{LaserScan} với mảng \texttt{ranges} hợp lệ. \\
+        \hline
+        \texttt{ros2 topic echo /odom --once} & Kiểm tra odometry của robot. & Có pose và twist của robot. \\
+        \hline
+        \texttt{ros2 topic echo /clock --once} & Kiểm tra thời gian mô phỏng. & Có thời gian mô phỏng tăng đều. \\
+        \hline
+        \texttt{ros2 topic echo /vision/detected\_objects --once} & Kiểm tra kết quả YOLOv8n. & Có \texttt{Detection2DArray} khi có đối tượng trong ảnh. \\
+        \hline
+        \texttt{ros2 topic echo /target\_object\_pose\_map --once} & Kiểm tra pose mục tiêu sau định vị. & Có \texttt{PoseStamped} khi bbox và depth hợp lệ. \\
+        \hline
+        \texttt{ros2 topic echo /target\_object\_marker --once} & Kiểm tra marker hiển thị RViz. & Có \texttt{Marker} phục vụ quan sát trực quan. \\
+        \hline
+        \texttt{ros2 topic echo /cmd\_vel --once} & Kiểm tra lệnh vận tốc từ Nav2. & Có \texttt{Twist} khi robot đang di chuyển. \\
+        \hline
+    \end{tabularx}
+\end{table}
 
-Nếu các topic trên có dữ liệu ổn định, có thể kết luận rằng pipeline cảm biến--nhận diện--định vị--điều hướng đang hoạt động đúng về mặt truyền thông ROS2.
+\subsubsection{Cách đọc lỗi theo luồng dữ liệu}
+\label{subsubsec:pipeline-debugging}
+
+\begin{table}[H]
+    \centering
+    \caption{Cách đọc lỗi theo luồng dữ liệu}
+    \label{tab:pipeline-debugging}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.25\textwidth}|>{\raggedright\arraybackslash}p{0.34\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Hiện tượng} & \textbf{Nguyên nhân có thể} & \textbf{Hướng kiểm tra} \\
+        \hline
+        Không có \texttt{/scan} & LiDAR chưa được mô phỏng đúng, frame/collision lỗi, Gazebo chưa chạy. & Kiểm tra robot model, \texttt{rplidar\_link} và RViz LaserScan. \\
+        \hline
+        Có \texttt{/scan} nhưng không có map & SLAM Toolbox chưa subscribe đúng topic hoặc TF thiếu. & Kiểm tra \texttt{scan\_topic}, \texttt{base\_frame}, \texttt{odom\_frame}, \texttt{map\_frame}. \\
+        \hline
+        Không có detection & Camera chưa publish ảnh hoặc YOLO chưa chạy. & Kiểm tra ảnh RGB, model \texttt{yolov8n.pt} và confidence threshold. \\
+        \hline
+        Có detection nhưng không có target pose & Depth không hợp lệ hoặc thiếu \texttt{camera\_info}. & Kiểm tra ảnh depth, \texttt{CameraInfo} và vùng tâm bbox. \\
+        \hline
+        Có target pose nhưng robot không tiếp cận & TF sang \texttt{map} không sẵn sàng hoặc Mission Manager không gửi goal. & Kiểm tra TF tree, trạng thái \texttt{patrol\_enabled} và action \texttt{NavigateToPose}. \\
+        \hline
+        Robot nhận goal nhưng không đi & Nav2/costmap/controller lỗi hoặc goal nằm ngoài vùng hợp lệ. & Kiểm tra Nav2 status, global costmap, local costmap và \texttt{/cmd\_vel}. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    >=Latex,
+    node distance=1.2cm and 1.5cm,
+    decision/.style={diamond, draw, fill=orange!10, align=center, inner sep=-1pt, text width=2.4cm},
+    block/.style={rectangle, draw, rounded corners, fill=blue!10, align=center, minimum height=1cm, text width=2.5cm},
+    error/.style={rectangle, draw, fill=red!10, align=center, text width=2.8cm, minimum height=1cm}
+]
+\node[decision] (scan) {Có topic \texttt{/scan}?};
+\node[error, right=of scan] (err_scan) {Kiểm tra Gazebo, Lidar};
+\node[decision, below=of scan] (map) {Có topic \texttt{/map}?};
+\node[error, right=of map] (err_map) {Kiểm tra SLAM, TF};
+\node[decision, below=of map] (detect) {Có Detection?};
+\node[error, right=of detect] (err_detect) {Kiểm tra YOLO, Ảnh RGB};
+\node[decision, below=of detect] (pose) {Có Pose 3D?};
+\node[error, right=of pose] (err_pose) {Kiểm tra Depth, CameraInfo};
+\node[block, fill=green!10, below=of pose] (ok) {Hệ thống OK};
+
+\draw[->, thick] (scan) -- node[above] {No} (err_scan);
+\draw[->, thick] (scan) -- node[right] {Yes} (map);
+\draw[->, thick] (map) -- node[above] {No} (err_map);
+\draw[->, thick] (map) -- node[right] {Yes} (detect);
+\draw[->, thick] (detect) -- node[above] {No} (err_detect);
+\draw[->, thick] (detect) -- node[right] {Yes} (pose);
+\draw[->, thick] (pose) -- node[above] {No} (err_pose);
+\draw[->, thick] (pose) -- node[right] {Yes} (ok);
+
+\end{tikzpicture}
+\caption{Sơ đồ kiểm tra lỗi theo pipeline cảm biến -- nhận diện -- định vị -- điều hướng}
+\label{fig:pipeline-debugging}
+\end{figure}
+
+\subsection{Sơ đồ hoạt động tổng hợp của nhiệm vụ}
+\label{subsec:mission-overall-flow}
+
+Sơ đồ hoạt động của nhiệm vụ có thể mô tả theo chuỗi quyết định sau. Robot bắt đầu bằng chế độ tuần tra. Nếu không phát hiện mục tiêu hợp lệ, robot tiếp tục gửi waypoint kế tiếp. Nếu có mục tiêu hợp lệ và khoảng cách đến mục tiêu lớn hơn khoảng cách an toàn, Mission Manager tạm dừng patrol, tính safe goal và gửi goal này đến Nav2. Khi quá trình tiếp cận kết thúc, hệ thống bật lại tuần tra.
+
+\begin{table}[H]
+    \centering
+    \caption{Sơ đồ hoạt động tổng hợp của nhiệm vụ tự hành}
+    \label{tab:mission-overall-flow}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\centering\arraybackslash}p{0.08\textwidth}|>{\raggedright\arraybackslash}p{0.24\textwidth}|>{\raggedright\arraybackslash}p{0.31\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Bước} & \textbf{Khối thực hiện} & \textbf{Dữ liệu vào} & \textbf{Dữ liệu ra} \\
+        \hline
+        1 & Gazebo/Ignition & World, robot model, pose ban đầu. & Dữ liệu cảm biến mô phỏng. \\
+        \hline
+        2 & SLAM/Localization & \texttt{/scan}, \texttt{/odom}, TF. & Map và pose robot. \\
+        \hline
+        3 & Patrol Node & Danh sách waypoint, trạng thái \texttt{patrol\_enabled}. & Goal tuần tra gửi Nav2. \\
+        \hline
+        4 & YOLOv8n & Ảnh RGB. & \texttt{Detection2DArray}. \\
+        \hline
+        5 & Object Localization & Detection, depth, \texttt{CameraInfo}. & Pose mục tiêu 3D. \\
+        \hline
+        6 & Mission Manager & Pose mục tiêu, pose robot, \texttt{safe\_distance}. & Safe goal hoặc lệnh tiếp tục tuần tra. \\
+        \hline
+        7 & Nav2 & Goal, map, costmap, TF. & \texttt{/cmd\_vel}. \\
+        \hline
+        8 & Differential Drive & \texttt{/cmd\_vel}. & Chuyển động thực của robot trong mô phỏng. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    >=Latex,
+    state/.style={rectangle, draw, rounded corners, fill=cyan!10, align=center, minimum height=1.2cm, text width=2.5cm},
+    decision/.style={diamond, draw, fill=orange!10, align=center, inner sep=-2pt, text width=2.4cm}
+]
+\node[state] (patrol) at (0, 0) {Chế độ\\Tuần tra};
+\node[decision] (check) at (4.5, 0) {Có mục tiêu hợp lệ?};
+\node[state] (approach) at (9.5, 0) {Tiếp cận\\an toàn};
+\node[state, fill=gray!20] (next) at (4.5, -3) {Waypoint\\tiếp theo};
+\node[state, fill=gray!20] (wait) at (9.5, -3) {Cooldown};
+
+\draw[->, thick] (patrol) -- (check);
+\draw[->, thick] (check) -- node[above, font=\footnotesize] {Yes ($d>d_s$)} (approach);
+\draw[->, thick] (check) -- node[left, font=\footnotesize] {No} (next);
+\draw[->, thick] (next.west) -| (patrol.south);
+\draw[->, thick] (approach) -- node[right, font=\footnotesize] {Goal done} (wait);
+\draw[->, thick] (wait.south) |- (0, -4.5) -- (patrol.south);
+\end{tikzpicture}
+\caption{Sơ đồ hoạt động tổng hợp của nhiệm vụ tự hành tuần tra -- phát hiện -- tiếp cận}
+\label{fig:mission-overall-flow}
+\end{figure}
+
+\subsection{Đánh giá quy trình triển khai}
+\label{subsec:deployment-assessment}
+
+Quy trình triển khai trong chương này có ưu điểm là rõ ràng, dễ kiểm tra và phù hợp với kiến trúc module của ROS2. Mỗi chức năng được kiểm tra bằng topic hoặc action riêng. Điều này giúp khi hệ thống không hoạt động, người phát triển có thể lần theo pipeline để xác định lỗi.
+
+Tuy nhiên, quy trình hiện vẫn mang tính mô phỏng và chưa tối ưu hoàn toàn cho robot thật. Waypoint còn được đặt cố định, Mission Manager mới ở dạng logic trạng thái đơn giản, việc định vị mục tiêu phụ thuộc nhiều vào chất lượng ảnh depth và hệ thống chưa có cơ chế tracking mục tiêu theo thời gian. Khi triển khai trên robot thật, cần bổ sung đánh giá định lượng, kiểm tra độ trễ, nhiễu cảm biến, sai số odometry và khả năng tránh vật cản động.
+
+\begin{table}[H]
+    \centering
+    \caption{Đánh giá quy trình triển khai nhiệm vụ tự hành}
+    \label{tab:deployment-assessment}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.24\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Mặt đánh giá} & \textbf{Nhận xét} \\
+        \hline
+        Tính rõ ràng & Quy trình triển khai theo từng bước, dễ chạy và dễ debug. \\
+        \hline
+        Tính module & Các node perception, localization, patrol và mission manager tách biệt, dễ thay thế hoặc mở rộng. \\
+        \hline
+        Tính an toàn & Robot không đi thẳng vào mục tiêu mà dừng ở khoảng cách \texttt{safe\_distance}. \\
+        \hline
+        Tính hạn chế & Phụ thuộc TF, depth, cấu hình Nav2 và chưa xử lý nhiều mục tiêu động. \\
+        \hline
+        Khả năng mở rộng & Có thể nâng cấp Mission Manager thành finite state machine hoặc behavior tree. \\
+        \hline
+    \end{tabularx}
+\end{table}
 
 \subsection{Kết luận chương}
+\label{subsec:deployment-conclusion}
 
-Chương này đã trình bày cách triển khai nhiệm vụ tự hành hoàn chỉnh trên TurtleBot4, từ khởi động mô phỏng, xây dựng bản đồ, điều hướng, tuần tra, nhận diện mục tiêu đến tiếp cận mục tiêu. Đây là chương kết nối các phân tích lý thuyết về cảm biến và cơ cấu chấp hành với hệ thống thực thi cụ thể.
+Chương 6 đã trình bày quá trình triển khai nhiệm vụ tự hành của TurtleBot4 từ khi khởi động mô phỏng đến khi robot thực hiện tuần tra, nhận diện mục tiêu, định vị mục tiêu và tiếp cận mục tiêu an toàn. Nội dung chương cho thấy các thành phần đã phân tích ở các chương trước không hoạt động riêng lẻ mà được ghép thành một chuỗi xử lý hoàn chỉnh.
+
+Thông qua quy trình triển khai, có thể thấy vai trò của từng lớp trong hệ thống: Gazebo/Ignition tạo môi trường và dữ liệu cảm biến; SLAM/localization tạo bản đồ và pose; Nav2 lập kế hoạch và điều khiển; YOLOv8n và RGB-D tạo thông tin mục tiêu; Mission Manager quyết định hành vi; cơ cấu chấp hành thực hiện chuyển động. Đây là cơ sở để chuyển sang chương đánh giá kết quả mô phỏng và chỉ ra những hạn chế cần cải thiện.

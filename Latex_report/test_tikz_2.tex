@@ -1,0 +1,30 @@
+\documentclass{article}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, calc}
+\begin{document}
+\begin{figure}[h]
+    \centering
+    \begin{tikzpicture}[
+        font=\small,
+        node distance=1.2cm and 1.0cm,
+        block/.style={
+            rectangle, rounded corners=3pt, draw=black, thick,
+            align=center, minimum height=1.0cm, minimum width=2.4cm,
+            text width=2.4cm
+        },
+        arrow/.style={-{Stealth[length=2.5mm]}, thick}
+    ]
+    \node[block, fill=blue!10] (env) {M\^oi tr\u{u}\`\oh ng};
+    \node[block, fill=green!12, right=of env] (sensor) {C\h{a}m bi\^en\\LiDAR, Camera\\Encoder};
+    \node[block, fill=orange!12, right=of sensor] (process) {X\u{u} l\'y\\SLAM, YOLO\\Localization};
+    \node[block, fill=yellow!15, right=of process] (control) {\DJ i\`\ecirc u khi\h{e}n\\Nav2\\Mission Manager};
+    \node[block, fill=red!10, below=1.0cm of control] (actuator) {C\oh{} c\^au ch\^ap h\`anh\\Truy\^en \dj \^ong vi sai};
+
+    \draw[arrow] (env) -- (sensor);
+    \draw[arrow] (sensor) -- (process);
+    \draw[arrow] (process) -- (control);
+    \draw[arrow] (control) -- (actuator);
+    \draw[arrow] (actuator.south) -- ++(0,-0.5) -| (env.south);
+    \end{tikzpicture}
+\end{figure}
+\end{document}

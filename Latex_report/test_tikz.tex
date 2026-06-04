@@ -1,0 +1,29 @@
+\documentclass{article}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, calc}
+\begin{document}
+\begin{tikzpicture}[
+    box/.style={draw, rectangle, rounded corners, align=center, minimum width=2.5cm, minimum height=1cm},
+    >=Latex
+]
+% Layer 1: Simulation
+\node[draw, fill=gray!10, minimum width=10cm, minimum height=3cm, dashed] (layer1) at (0, 0) {};
+\node[anchor=north west, font=\bfseries] at (layer1.north west) {Lớp 1: Mô phỏng (Gazebo/Ignition)};
+\node[box, fill=white] (world) at (-2.5, -0.5) {World\\(Warehouse)};
+\node[box, fill=white] (robot) at (2.5, -0.5) {Robot Model\\(TB4 Lite)};
+\draw[<->, thick] (world) -- (robot);
+
+% Layer 2: ROS2
+\node[draw, fill=blue!5, minimum width=10cm, minimum height=3.5cm, dashed] (layer2) at (0, -5.5) {};
+\node[anchor=north west, font=\bfseries] at (layer2.north west) {Lớp 2: ROS2 Mission Nodes};
+\node[box, fill=white] (nav) at (-3, -6) {Nav2 \& SLAM};
+\node[box, fill=white] (vision) at (0, -6) {YOLOv8 \&\\Localization};
+\node[box, fill=white] (mission) at (3, -6) {Patrol \&\\Mission Mgr};
+
+% Connections
+\draw[->, thick, blue] (robot.south) ++(-0.6,0) |- node[above, near end] {LiDAR, Odom} (nav.north);
+\draw[->, thick, blue] (robot.south) ++(-0.2,0) |- node[above, near end] {RGB-D Camera} (vision.north);
+\draw[<-, thick, red] (robot.south) ++(0.2,0) |- node[below, near end] {\texttt{/cmd\_vel}} (nav.east);
+
+\end{tikzpicture}
+\end{document}

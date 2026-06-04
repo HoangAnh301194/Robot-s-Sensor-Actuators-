@@ -1,83 +1,702 @@
-﻿\section{CƠ CẤU CHẤP HÀNH VÀ ĐIỀU KHIỂN CHUYỂN ĐỘNG}
+\providecommand{\placeholderfigure}[3]{%
+    \begin{figure}[H]
+        \centering
+        \fbox{%
+            \parbox[c][4.0cm][c]{0.88\textwidth}{%
+                \centering
+                \textit{#1}%
+            }%
+        }
+        \caption{#2}
+        \label{#3}
+    \end{figure}
+}
+
+\section{CƠ CẤU CHẤP HÀNH VÀ ĐIỀU KHIỂN CHUYỂN ĐỘNG}
+\label{sec:actuators-motion-control}
+
+Chương này phân tích lớp chấp hành và điều khiển chuyển động của hệ thống robot tự hành TurtleBot4. Chương 5 tập trung vào cách hệ thống biến thông tin nhận thức thành chuyển động vật lý. Nội dung gồm cấu trúc truyền động vi sai, mô hình động học, lệnh vận tốc \texttt{/cmd\_vel}, vai trò của Nav2, Patrol Node, Mission Manager và mối liên hệ giữa cảm biến với cơ cấu chấp hành.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=2cm,
+  block/.style={draw, rectangle, fill=blue!5, align=center, minimum height=1.2cm, thick},
+  >=Latex
+]
+\node[block, fill=orange!10] (sensor) {Cảm biến};
+\node[block, right=of sensor, fill=green!10] (control) {Điều khiển\\(Nav2 / Mission)};
+\node[block, right=of control, fill=red!10] (actuator) {Chấp hành\\(Vi sai)};
+\draw[->, thick] (sensor) -- node[above] {Dữ liệu} (control);
+\draw[->, thick] (control) -- node[above] {\texttt{/cmd\_vel}} (actuator);
+\end{tikzpicture}
+\caption{Tổng quan chuỗi cảm biến -- điều khiển -- cơ cấu chấp hành của TurtleBot4}
+\label{fig:actuator-control-overview}
+\end{figure}
 
 \subsection{Cấu trúc chấp hành của TurtleBot4}
+\label{subsec:turtlebot4-actuator-structure}
 
-TurtleBot4 thuộc nhóm robot di động mặt đất sử dụng truyền động vi sai. Hai bánh chủ động được điều khiển độc lập, kết hợp với bánh tự do để giữ cân bằng cơ học. Cấu trúc này đơn giản nhưng hiệu quả cho robot trong nhà, đặc biệt trong các nhiệm vụ tuần tra, điều hướng hành lang và tiếp cận mục tiêu.
+\subsubsection{Khái niệm cơ cấu chấp hành trong robot tự hành}
+\label{subsubsec:actuator-concept}
 
-Cơ cấu chấp hành của TurtleBot4 nhận lệnh vận tốc ở mức cao dưới dạng \texttt{geometry\_msgs/Twist}, thường là topic \texttt{/cmd\_vel}. Lệnh gồm vận tốc tuyến tính theo trục \(x\) và vận tốc góc quanh trục \(z\). Bộ điều khiển cấp thấp chuyển đổi lệnh này thành vận tốc từng bánh.
+Cơ cấu chấp hành là phần tử biến tín hiệu điều khiển thành tác động vật lý lên môi trường. Trong robot di động, tác động vật lý quan trọng nhất là chuyển động của thân robot. Với TurtleBot4, cơ cấu chấp hành chính là hệ truyền động vi sai gồm hai bánh chủ động được điều khiển độc lập. Khi hai bánh quay cùng chiều và cùng tốc độ, robot đi thẳng; khi hai bánh quay khác tốc độ, robot quay; khi hai bánh quay ngược chiều, robot có thể quay gần như tại chỗ.
+
+Trong project, các node cấp cao như Patrol Node hoặc Mission Manager không điều khiển trực tiếp động cơ. Các node này chỉ gửi mục tiêu hoặc yêu cầu di chuyển cho Nav2. Nav2 tạo lệnh vận tốc dạng \texttt{geometry\_msgs/Twist} trên topic \texttt{/cmd\_vel}, sau đó bộ điều khiển cấp thấp chuyển lệnh vận tốc thành vận tốc quay của từng bánh xe.
+
+\subsubsection{Thành phần và chức năng}
+\label{subsubsec:actuator-components}
+
+\begin{table}[H]
+    \centering
+    \caption{Thành phần và chức năng của lớp chấp hành}
+    \label{tab:actuator-components}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.30\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Thành phần} & \textbf{Chức năng trong hệ chấp hành} \\
+        \hline
+        Hai bánh chủ động trái/phải & Tạo lực kéo và quyết định hướng chuyển động của robot. Mỗi bánh có thể được điều khiển với tốc độ riêng. \\
+        \hline
+        Bánh tự do hoặc bánh đỡ & Giữ cân bằng cơ học cho thân robot, không trực tiếp tạo lực kéo. \\
+        \hline
+        Động cơ bánh xe & Biến tín hiệu điều khiển thành chuyển động quay của bánh. \\
+        \hline
+        Encoder bánh xe & Đo số xung quay của bánh, giúp ước lượng vận tốc và quãng đường di chuyển. \\
+        \hline
+        Bộ điều khiển cấp thấp & Nhận lệnh vận tốc từ \texttt{/cmd\_vel} và chuyển thành tốc độ bánh trái, bánh phải. \\
+        \hline
+        Topic \texttt{/cmd\_vel} & Kênh điều khiển vận tốc chính, chứa vận tốc tuyến tính và vận tốc góc của robot. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\subsubsection{Input và output của lớp chấp hành}
+\label{subsubsec:actuator-io}
+
+\begin{table}[H]
+    \centering
+    \caption{Input và output của lớp chấp hành}
+    \label{tab:actuator-io}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.28\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Mục} & \textbf{Nội dung} \\
+        \hline
+        Input & Lệnh \texttt{geometry\_msgs/Twist} trên topic \texttt{/cmd\_vel}. Thành phần thường dùng là \texttt{linear.x = v} và \texttt{angular.z = omega}. \\
+        \hline
+        Xử lý & Bộ điều khiển cấp thấp chuyển đổi vận tốc robot thành vận tốc từng bánh theo mô hình robot vi sai. \\
+        \hline
+        Output vật lý & Robot di chuyển tịnh tiến, quay, hoặc vừa tiến vừa quay trong mặt phẳng. \\
+        \hline
+        Output dữ liệu phản hồi & Odometry \texttt{/odom}, TF \texttt{odom -> base\_link}, vận tốc thực tế hoặc trạng thái chuyển động của robot. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Latex]
+% Robot body
+\draw[thick, fill=blue!5] (0,0) circle (2.5);
+% Wheels
+\draw[thick, fill=black!70, rounded corners=1pt] (-0.8, 2.2) rectangle (0.8, 2.8);
+\draw[thick, fill=black!70, rounded corners=1pt] (-0.8, -2.8) rectangle (0.8, -2.2);
+\node at (0, 3.2) {Bánh trái};
+\node at (0, -3.2) {Bánh phải};
+% Castor wheels
+\draw[thick, fill=gray!50] (1.8, 0) circle (0.3);
+\node at (1.8, -0.6) {Bánh đỡ trước};
+\draw[thick, fill=gray!50] (-1.8, 0) circle (0.3);
+\node at (-1.8, -0.6) {Bánh đỡ sau};
+% Axes
+\draw[->, thick] (0,0) -- (4,0) node[right] {$x$ (hướng tiến)};
+\draw[->, thick] (0,0) -- (0,3.8) node[above] {$y$};
+% Center
+\filldraw[red] (0,0) circle (2pt) node[anchor=south east] {Tâm base\_link};
+\end{tikzpicture}
+\caption{Cấu tạo truyền động vi sai của TurtleBot4 gồm hai bánh chủ động và bánh đỡ}
+\label{fig:turtlebot4-differential-drive}
+\end{figure}
 
 \subsection{Mô hình động học robot vi sai}
+\label{subsec:differential-drive-kinematics}
 
-Với robot vi sai, giả sử robot chuyển động trong mặt phẳng, trạng thái robot được mô tả bởi \((x,y,\theta)\). Phương trình động học là:
+\subsubsection{Trạng thái và giả thiết chuyển động}
+\label{subsubsec:state-assumptions}
 
-\[
-\dot{x} = v\cos\theta, \qquad
-\dot{y} = v\sin\theta, \qquad
-\dot{\theta} = \omega
-\]
+TurtleBot4 được mô hình hóa là robot vi sai chuyển động trên mặt phẳng. Trạng thái của robot tại thời điểm bất kỳ được mô tả bởi ba đại lượng: vị trí theo trục $x$, vị trí theo trục $y$ và góc hướng của thân robot so với hệ tọa độ bản đồ.
 
-Trong đó \(v\) là vận tốc tuyến tính, \(\omega\) là vận tốc góc. Quan hệ giữa vận tốc robot và vận tốc bánh xe là:
+\begin{equation}
+    \mathbf{q}
+    =
+    \begin{bmatrix}
+        x & y & \theta
+    \end{bmatrix}^{\mathsf{T}}
+    \label{eq:robot-state}
+\end{equation}
 
-\[
-v = \frac{r}{2}(\omega_r + \omega_l), \qquad
-\omega = \frac{r}{L}(\omega_r - \omega_l)
-\]
+Trong đó, $x$ và $y$ là tọa độ của robot trên mặt phẳng, $\theta$ là góc hướng của robot. Mô hình này giả thiết robot chuyển động trên mặt phẳng, hai bánh chủ động tiếp xúc với mặt sàn, không xét trượt bánh lớn và không xét chuyển động theo phương thẳng đứng.
 
-Suy ra:
+\subsubsection{Phương trình động học thuận}
+\label{subsubsec:forward-kinematics}
 
-\[
-\omega_r = \frac{v + \frac{L}{2}\omega}{r}, \qquad
-\omega_l = \frac{v - \frac{L}{2}\omega}{r}
-\]
+Khi robot nhận vận tốc tuyến tính $v$ và vận tốc góc $\omega$, tốc độ thay đổi trạng thái của robot được mô tả bởi hệ phương trình động học:
 
-Mô hình này cho thấy mỗi quyết định điều hướng cuối cùng đều được thực thi thông qua hai đại lượng vật lý là vận tốc bánh trái và bánh phải.
+\begin{align}
+    \dot{x} &= v\cos(\theta), \label{eq:diff-drive-xdot}\\
+    \dot{y} &= v\sin(\theta), \label{eq:diff-drive-ydot}\\
+    \dot{\theta} &= \omega. \label{eq:diff-drive-thetadot}
+\end{align}
+
+Ba công thức trên cho thấy hướng chuyển động của robot phụ thuộc vào góc $\theta$. Nếu robot đang hướng theo trục $x$ của bản đồ thì phần lớn vận tốc tuyến tính làm thay đổi $x$. Nếu robot quay sang hướng khác, cùng một giá trị $v$ sẽ tạo ra thành phần chuyển động theo cả $x$ và $y$.
+
+\subsubsection{Quan hệ giữa vận tốc robot và vận tốc bánh xe}
+\label{subsubsec:wheel-velocity-relation}
+
+Gọi $r$ là bán kính bánh xe, $L$ là khoảng cách giữa hai bánh chủ động, $\omega_r$ là vận tốc góc của bánh phải và $\omega_l$ là vận tốc góc của bánh trái. Vận tốc tuyến tính và vận tốc góc của robot được tính như sau:
+
+\begin{align}
+    v &= \frac{r}{2}\left(\omega_r + \omega_l\right), \label{eq:linear-velocity-wheels}\\
+    \omega &= \frac{r}{L}\left(\omega_r - \omega_l\right). \label{eq:angular-velocity-wheels}
+\end{align}
+
+Công thức~\eqref{eq:linear-velocity-wheels} cho biết vận tốc tiến của robot bằng trung bình vận tốc dài của hai bánh. Công thức~\eqref{eq:angular-velocity-wheels} cho biết robot quay khi hai bánh có vận tốc khác nhau. Chênh lệch vận tốc giữa hai bánh càng lớn thì robot quay càng nhanh.
+
+Khi cần điều khiển robot theo lệnh $v$ và $\omega$, bộ điều khiển phải tính ngược lại vận tốc góc của từng bánh:
+
+\begin{align}
+    \omega_r &= \frac{v + \frac{L}{2}\omega}{r}, \label{eq:right-wheel-speed}\\
+    \omega_l &= \frac{v - \frac{L}{2}\omega}{r}. \label{eq:left-wheel-speed}
+\end{align}
+
+Nếu $\omega = 0$ thì $\omega_r = \omega_l$, robot đi thẳng. Nếu $v=0$ và $\omega \neq 0$, hai bánh quay ngược chiều, robot quay tại chỗ. Nếu $v$ và $\omega$ cùng khác $0$, robot vừa tiến vừa quay theo một quỹ đạo cong.
+
+\begin{table}[H]
+    \centering
+    \caption{Các trường hợp chuyển động của robot vi sai}
+    \label{tab:differential-drive-cases}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.20\textwidth}|>{\centering\arraybackslash}p{0.22\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Trường hợp} & \textbf{Điều kiện} & \textbf{Chuyển động của robot} \\
+        \hline
+        Đi thẳng & $\omega_r = \omega_l$ & Robot chuyển động theo hướng hiện tại. \\
+        \hline
+        Quay trái & $\omega_r > \omega_l$ & Bánh phải đi nhanh hơn bánh trái, robot quay sang trái. \\
+        \hline
+        Quay phải & $\omega_r < \omega_l$ & Bánh trái đi nhanh hơn bánh phải, robot quay sang phải. \\
+        \hline
+        Quay tại chỗ & $\omega_r = -\omega_l$ & Robot quay quanh tâm gần giữa hai bánh. \\
+        \hline
+        Đứng yên & $\omega_r = \omega_l = 0$ & Robot không di chuyển. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Latex]
+% Robot body outline
+\draw[dashed, gray] (0,0) circle (2);
+% Wheels
+\draw[thick, fill=black!70] (-0.6, 1.8) rectangle (0.6, 2.2);
+\draw[thick, fill=black!70] (-0.6, -2.2) rectangle (0.6, -1.8);
+% ICC
+\filldraw[blue] (0, 4) circle (2pt) node[above] {ICC (Tâm quay tức thời)};
+\draw[dashed, blue] (0,-2) -- (0, 4);
+% Radius R
+\draw[<->, blue] (0, 0) -- (0, 4) node[midway, right] {$R$};
+% Wheel distance L
+\draw[<->, red] (1, -2) -- (1, 2) node[midway, right] {$L$};
+\draw[dotted, red] (0, 2) -- (1, 2);
+\draw[dotted, red] (0, -2) -- (1, -2);
+% Velocities
+\draw[->, thick, green!50!black] (0,0) -- (2,0) node[right] {$v$};
+\draw[->, thick, green!50!black] (0,2) -- (1.5,2) node[right] {$v_l$};
+\draw[->, thick, green!50!black] (0,-2) -- (2.5,-2) node[right] {$v_r$};
+% Center
+\filldraw[black] (0,0) circle (2pt);
+\end{tikzpicture}
+\caption{Mô hình động học robot vi sai và quan hệ giữa vận tốc hai bánh}
+\label{fig:differential-drive-kinematics}
+\end{figure}
+
+\subsection{Lệnh vận tốc \texttt{/cmd\_vel} và quá trình thực thi chuyển động}
+\label{subsec:cmd-vel-execution}
+
+Trong ROS2, lệnh điều khiển vận tốc cho robot di động thường được biểu diễn bằng bản tin \texttt{geometry\_msgs/Twist}. Đối với robot vi sai di chuyển trên mặt phẳng, hai thành phần quan trọng nhất là \texttt{linear.x} và \texttt{angular.z}.
+
+\begin{table}[H]
+    \centering
+    \caption{Các thành phần chính của bản tin \texttt{/cmd\_vel}}
+    \label{tab:cmd-vel-components}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.30\textwidth}|>{\centering\arraybackslash}p{0.14\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Thành phần trong \texttt{/cmd\_vel}} & \textbf{Ký hiệu} & \textbf{Ý nghĩa} \\
+        \hline
+        \texttt{linear.x} & $v$ & Vận tốc tuyến tính theo hướng tiến của robot. \\
+        \hline
+        \texttt{angular.z} & $\omega$ & Vận tốc góc quay quanh trục thẳng đứng của robot. \\
+        \hline
+        \texttt{linear.y}, \texttt{linear.z} & -- & Thường không dùng đối với robot vi sai mặt đất. \\
+        \hline
+        \texttt{angular.x}, \texttt{angular.y} & -- & Thường không dùng vì robot không lắc quanh các trục này trong mô hình phẳng. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+Quá trình thực thi chuyển động có thể mô tả theo chuỗi: Nav2 sinh lệnh \texttt{/cmd\_vel}, bộ điều khiển cấp thấp chuyển đổi thành tốc độ bánh, động cơ làm quay bánh, robot di chuyển, encoder và odometry phản hồi trạng thái mới. Đây là vòng kín điều khiển ở mức chuyển động.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  block/.style={draw, rectangle, fill=blue!5, align=center, minimum height=1cm, text width=2.8cm},
+  >=Latex
+]
+\node[block] (nav2) {Nav2\\(Local Controller)};
+\node[block, right=2cm of nav2] (driver) {Motor Driver\\(Kinematics)};
+\node[block, right=2cm of driver] (motors) {Motors\\(Bánh xe)};
+
+\draw[->, thick] (nav2) -- node[above] {\texttt{/cmd\_vel}} node[below] {$(v, \omega)$} (driver);
+\draw[->, thick] (driver) -- node[above] {$\omega_l, \omega_r$} (motors);
+\end{tikzpicture}
+\caption{Luồng chuyển đổi từ \texttt{/cmd\_vel} sang vận tốc bánh và chuyển động thực tế}
+\label{fig:cmd-vel-to-wheel-motion}
+\end{figure}
 
 \subsection{Nav2 như lớp điều khiển chuyển động cấp cao}
+\label{subsec:nav2-high-level-control}
 
-Nav2 đóng vai trò bộ điều khiển chuyển động cấp cao. Khi nhận goal từ Patrol Node hoặc Mission Manager, Nav2 thực hiện các bước: kiểm tra bản đồ, lập đường đi toàn cục, tạo lệnh điều khiển cục bộ, tránh vật cản và gửi lệnh vận tốc cho robot. Trong hệ thống này, các node điều phối không điều khiển trực tiếp động cơ mà gửi mục tiêu vị trí cho Nav2 qua action \texttt{NavigateToPose}.
+\subsubsection{Vai trò của Nav2}
+\label{subsubsec:nav2-role}
 
-Cách thiết kế này có ưu điểm là tách biệt rõ nhiệm vụ và điều khiển. Mission Manager quyết định robot cần làm gì, còn Nav2 quyết định robot di chuyển như thế nào để đạt mục tiêu đó một cách an toàn.
+Nav2 là lớp điều khiển chuyển động cấp cao trong project. Thay vì tự viết toàn bộ thuật toán lập đường, tránh vật cản và điều khiển cục bộ, hệ thống sử dụng Nav2 để nhận goal vị trí và chuyển goal đó thành chuỗi lệnh vận tốc phù hợp.
+
+Nav2 không điều khiển trực tiếp động cơ. Nó làm việc ở mức cao hơn: nhận mục tiêu, dùng bản đồ và costmap để lập đường đi, dùng controller để bám đường, sau đó xuất lệnh \texttt{/cmd\_vel} cho lớp chấp hành.
+
+\subsubsection{Thành phần chính của Nav2 trong project}
+\label{subsubsec:nav2-components}
+
+\begin{table}[H]
+    \centering
+    \caption{Các thành phần chính của Nav2 trong project}
+    \label{tab:nav2-components}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.27\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Thành phần} & \textbf{Chức năng} \\
+        \hline
+        BT Navigator & Quản lý tiến trình điều hướng theo behavior tree hoặc logic điều hướng đã cấu hình. \\
+        \hline
+        Planner Server & Tính đường đi toàn cục từ vị trí hiện tại đến goal. \\
+        \hline
+        Controller Server & Sinh lệnh vận tốc cục bộ để robot bám theo đường đi. \\
+        \hline
+        Costmap & Biểu diễn vùng trống, vật cản và vùng nguy hiểm xung quanh robot. \\
+        \hline
+        Recovery behavior & Thực hiện hành vi khôi phục khi robot bị kẹt hoặc không đến được goal. \\
+        \hline
+        Action \texttt{NavigateToPose} & Giao diện nhận goal từ Patrol Node hoặc Mission Manager. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\subsubsection{Input và output của Nav2}
+\label{subsubsec:nav2-io}
+
+\begin{table}[H]
+    \centering
+    \caption{Input và output của Nav2}
+    \label{tab:nav2-io}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.26\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Mục} & \textbf{Dữ liệu} \\
+        \hline
+        Input & Goal \texttt{NavigateToPose}, map, costmap, pose robot, odometry, TF, dữ liệu vật cản từ LiDAR. \\
+        \hline
+        Xử lý & Lập đường toàn cục, điều khiển cục bộ, tránh vật cản và kiểm tra trạng thái goal. \\
+        \hline
+        Output & Lệnh \texttt{/cmd\_vel} và trạng thái action như \texttt{accepted}, \texttt{executing}, \texttt{succeeded}, \texttt{canceled} hoặc \texttt{failed}. \\
+        \hline
+        Vai trò trong project & Điều khiển robot đến waypoint tuần tra hoặc điểm tiếp cận mục tiêu do Mission Manager tạo ra. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  block/.style={draw, rectangle, fill=cyan!10, align=center, minimum height=1cm, text width=2.8cm},
+  >=Latex
+]
+\node[block, fill=green!10] (goal) at (0, 0) {Goal\\(Pose)};
+\node[block] (planner) at (4.5, 1.5) {Global Planner\\(A* / Smac)};
+\node[block] (controller) at (10, 0) {Local Controller\\(DWB / MPPI)};
+\node[block, fill=orange!10] (map) at (4.5, -1.5) {Costmap};
+
+\draw[->, thick] (goal) |- (planner);
+\draw[->, thick] (planner) -| node[pos=0.25, above] {Đường đi toàn cục} (controller);
+\draw[->, thick] (map) -- (planner);
+\draw[->, thick] (map) -| (controller);
+\draw[->, thick] (controller) -- +(3,0) node[right] {\texttt{/cmd\_vel}};
+\end{tikzpicture}
+\caption{Sơ đồ Nav2 nhận goal và sinh lệnh vận tốc \texttt{/cmd\_vel}}
+\label{fig:nav2-goal-to-cmdvel}
+\end{figure}
 
 \subsection{Patrol Node}
+\label{subsec:patrol-node}
 
-Patrol Node tạo hành vi tuần tra bằng cách gửi tuần tự các waypoint trong frame \texttt{map}. Danh sách waypoint hiện tại gồm bốn điểm tạo thành một chu trình đơn giản:
+\subsubsection{Chức năng}
+\label{subsubsec:patrol-node-function}
 
-\[
-(1.0,0.0), \quad (1.0,1.0), \quad (0.0,1.0), \quad (0.0,0.0)
-\]
+Patrol Node tạo hành vi tuần tra tự động bằng cách gửi lần lượt các waypoint cho Nav2. Waypoint là các điểm mục tiêu trong frame \texttt{map}. Sau khi robot đến một waypoint, node chuyển sang waypoint tiếp theo. Cách làm này đơn giản nhưng phù hợp để tạo hành vi tuần tra trong môi trường mô phỏng.
 
-Node sử dụng action client \texttt{NavigateToPose}. Khi Nav2 hoàn thành một waypoint, node tăng chỉ số và gửi waypoint tiếp theo. Khi nhận tín hiệu \texttt{/mission\_manager/patrol\_enabled = false}, Patrol Node hủy goal hiện tại để nhường quyền điều khiển cho Mission Manager.
+Trong báo cáo gốc, danh sách waypoint gồm bốn điểm tạo thành một chu trình: $(1.0, 0.0)$, $(1.0, 1.0)$, $(0.0, 1.0)$, $(0.0, 0.0)$. Khi Mission Manager phát hiện mục tiêu và cần tiếp cận, Patrol Node nhận tín hiệu tạm dừng rồi hủy goal đang chạy.
+
+\begin{table}[H]
+    \centering
+    \caption{Input, output và vai trò của Patrol Node}
+    \label{tab:patrol-node-io}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.26\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Mục} & \textbf{Nội dung} \\
+        \hline
+        Input & Danh sách waypoint, trạng thái Nav2, tín hiệu \texttt{/mission\_manager/patrol\_enabled}. \\
+        \hline
+        Output & Goal \texttt{NavigateToPose} gửi đến Nav2 hoặc lệnh hủy goal khi cần nhường quyền điều khiển. \\
+        \hline
+        Trạng thái cơ bản & Đang gửi waypoint, đang chờ Nav2 hoàn thành, tạm dừng do Mission Manager. \\
+        \hline
+        Vai trò & Tạo chuyển động tuần tra nền để robot liên tục quan sát môi trường. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\subsubsection{Thuật toán tuần tra}
+\label{subsubsec:patrol-algorithm}
+
+Thuật toán tuần tra có thể mô tả ngắn gọn như sau: nạp danh sách waypoint, đặt chỉ số waypoint ban đầu bằng $0$, gửi waypoint hiện tại đến Nav2, chờ kết quả, sau đó tăng chỉ số và lặp lại. Nếu nhận tín hiệu tạm dừng từ Mission Manager, goal hiện tại bị hủy để robot chuyển sang nhiệm vụ tiếp cận mục tiêu.
+
+\begin{equation}
+    i_{\mathrm{next}} = (i+1)\bmod N
+    \label{eq:next-waypoint-index}
+\end{equation}
+
+Trong đó, $i$ là chỉ số waypoint hiện tại, $N$ là số waypoint trong chu trình. Phép toán modulo giúp robot quay lại waypoint đầu tiên sau khi hoàn thành waypoint cuối cùng.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  block/.style={draw, rounded corners, fill=yellow!10, align=center, minimum height=1cm, text width=3cm},
+  decision/.style={draw, diamond, fill=red!10, align=center, aspect=2, text width=2.5cm},
+  >=Latex
+]
+\node[block] (start) at (0,0) {Khởi tạo\\Danh sách Waypoints};
+\node[block] (send) at (0,-2) {Gửi Waypoint $i$\\đến Nav2};
+\node[decision] (wait) at (0,-4.5) {Đã đến nơi\\hoặc bị hủy?};
+\node[block] (next) at (5,-4.5) {Tăng chỉ số $i$\\$i = (i+1) \bmod N$};
+
+\draw[->, thick] (start) -- (send);
+\draw[->, thick] (send) -- (wait);
+\draw[->, thick] (wait) -- node[above] {Đúng} (next);
+\draw[->, thick] (wait.west) -- +(-1.5,0) |- node[near start, left] {Chưa đến} (send.west);
+\draw[->, thick] (next) |- (send);
+\end{tikzpicture}
+\caption{Sơ đồ thuật toán Patrol Node gửi waypoint tuần tự cho Nav2}
+\label{fig:patrol-node-waypoints}
+\end{figure}
 
 \subsection{Mission Manager và điều khiển hành vi}
+\label{subsec:mission-manager-behavior}
 
-Mission Manager là lớp điều phối nhiệm vụ. Khi robot đang tuần tra và phát hiện mục tiêu ở khoảng cách lớn hơn \texttt{safe\_distance}, node tạm dừng tuần tra, biến đổi vị trí mục tiêu sang frame \texttt{map}, tính điểm tiếp cận an toàn và gửi goal mới cho Nav2.
+\subsubsection{Vai trò của Mission Manager}
+\label{subsubsec:mission-manager-role}
 
-Điểm tiếp cận không trùng với vị trí mục tiêu mà nằm cách mục tiêu một khoảng an toàn. Nếu vector từ robot tới mục tiêu là \((d_x,d_y)\), khoảng cách phẳng là:
+Mission Manager là lớp điều phối hành vi giữa tuần tra và tiếp cận mục tiêu. Khi robot đang tuần tra, nếu hệ thống nhận được pose mục tiêu hợp lệ và mục tiêu nằm xa hơn khoảng cách an toàn, Mission Manager tạm dừng Patrol Node, tính điểm tiếp cận an toàn và gửi goal mới cho Nav2. Khi tiếp cận xong hoặc hết thời gian chờ, robot được chuyển về chế độ tuần tra.
 
-\[
-d = \sqrt{d_x^2 + d_y^2}
-\]
+\begin{table}[H]
+    \centering
+    \caption{Input, output và vai trò của Mission Manager}
+    \label{tab:mission-manager-io}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.26\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Mục} & \textbf{Nội dung} \\
+        \hline
+        Input & Pose mục tiêu, TF giữa camera và \texttt{map}, pose robot hiện tại, trạng thái Nav2. \\
+        \hline
+        Output & Tín hiệu bật/tắt tuần tra, goal tiếp cận an toàn gửi đến Nav2. \\
+        \hline
+        Trạng thái chính & \texttt{patrolling} và \texttt{approaching\_target}. \\
+        \hline
+        Vai trò & Quyết định robot đang tuần tra hay chuyển sang tiếp cận mục tiêu. \\
+        \hline
+    \end{tabularx}
+\end{table}
 
-Với khoảng cách an toàn \(d_s\), điểm goal được tính theo tỷ lệ:
+\subsubsection{Công thức tính điểm tiếp cận an toàn}
+\label{subsubsec:safe-goal-formula}
 
-\[
-\alpha = \frac{d-d_s}{d}
-\]
+Điểm tiếp cận an toàn không trùng với vị trí mục tiêu. Điểm này nằm trên đường thẳng nối robot và mục tiêu, nhưng cách mục tiêu một khoảng $d_s$. Cách tính này giúp robot không va chạm hoặc đứng quá sát đối tượng.
 
-\[
-x_g = x_r + \alpha d_x, \qquad y_g = y_r + \alpha d_y
-\]
+Gọi vị trí robot và vị trí mục tiêu trong frame \texttt{map} lần lượt là:
 
-Cách tính này giúp robot tiếp cận mục tiêu mà không va chạm hoặc đứng quá sát đối tượng.
+\begin{equation}
+    \mathbf{p}_r =
+    \begin{bmatrix}
+        x_r & y_r
+    \end{bmatrix}^{\mathsf{T}},
+    \qquad
+    \mathbf{p}_t =
+    \begin{bmatrix}
+        x_t & y_t
+    \end{bmatrix}^{\mathsf{T}}
+    \label{eq:robot-target-positions}
+\end{equation}
 
-\subsection{Quan hệ giữa cảm biến và chấp hành}
+Vector từ robot đến mục tiêu là:
 
-Điểm cốt lõi của hệ thống là liên hệ giữa cảm biến và cơ cấu chấp hành. Cảm biến phát hiện mục tiêu; thuật toán định vị chuyển mục tiêu thành tọa độ; Mission Manager biến tọa độ thành goal; Nav2 biến goal thành lệnh vận tốc; cơ cấu vi sai biến lệnh vận tốc thành chuyển động bánh xe. Chuỗi này thể hiện rõ bản chất của một hệ robot tự hành:
+\begin{equation}
+    \Delta\mathbf{p}
+    =
+    \mathbf{p}_t-\mathbf{p}_r
+    =
+    \begin{bmatrix}
+        x_t-x_r & y_t-y_r
+    \end{bmatrix}^{\mathsf{T}}
+    \label{eq:robot-target-vector}
+\end{equation}
 
-\[
-\text{Detection} \rightarrow \text{3D Localization} \rightarrow \text{Goal} \rightarrow \text{Velocity Command} \rightarrow \text{Wheel Motion}
-\]
+Khoảng cách phẳng giữa robot và mục tiêu được tính bằng chuẩn Euclid:
+
+\begin{equation}
+    d
+    =
+    \left\lVert\Delta\mathbf{p}\right\rVert_2
+    =
+    \sqrt{(x_t-x_r)^2+(y_t-y_r)^2}
+    \label{eq:robot-target-distance}
+\end{equation}
+
+Với $d_s$ là khoảng cách an toàn, hệ số tiến tới mục tiêu được tính như sau:
+
+\begin{equation}
+    \alpha = \frac{d-d_s}{d},
+    \qquad d>d_s
+    \label{eq:safe-goal-alpha}
+\end{equation}
+
+Điểm goal an toàn được xác định bởi:
+
+\begin{equation}
+    \mathbf{p}_g
+    =
+    \mathbf{p}_r+\alpha\Delta\mathbf{p}
+    \label{eq:safe-goal-vector}
+\end{equation}
+
+Viết theo từng tọa độ:
+
+\begin{align}
+    x_g &= x_r+\alpha(x_t-x_r), \label{eq:safe-goal-x}\\
+    y_g &= y_r+\alpha(y_t-y_r). \label{eq:safe-goal-y}
+\end{align}
+
+Góc quay tại goal có thể chọn sao cho robot hướng về phía mục tiêu:
+
+\begin{equation}
+    \theta_g
+    =
+    \operatorname{atan2}(y_t-y_g,\,x_t-x_g)
+    \label{eq:safe-goal-heading}
+\end{equation}
+
+Nếu $d\leq d_s$, robot đã ở đủ gần mục tiêu nên không cần gửi goal tiếp cận mới. Điều kiện này tránh việc robot liên tục gửi goal ngắn và gây dao động gần mục tiêu.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Latex, rotate=20]
+% Robot
+\filldraw[blue] (0,0) circle (3pt) node[below left] {Robot $\mathbf{p}_r$};
+% Target
+\filldraw[red] (6,0) circle (3pt) node[below right] {Mục tiêu $\mathbf{p}_t$};
+% Safe goal
+\filldraw[green!50!black] (4,0) circle (3pt) node[above left] {Goal an toàn $\mathbf{p}_g$};
+
+% Line
+\draw[dashed] (0,0) -- (6,0);
+\draw[->, thick, blue] (0,0) -- (3.8,0);
+
+% Distance d
+\draw[<->] (0, 0.8) -- (6, 0.8) node[midway, above, sloped] {$d$};
+% Distance ds
+\draw[<->, thick, red] (4, -0.8) -- (6, -0.8) node[midway, below, sloped] {$d_s$ (An toàn)};
+
+\end{tikzpicture}
+\caption{Cách Mission Manager tính điểm tiếp cận an toàn từ vị trí robot và vị trí mục tiêu}
+\label{fig:mission-manager-safe-goal}
+\end{figure}
+
+\subsection{Quan hệ giữa cảm biến và cơ cấu chấp hành}
+\label{subsec:sensor-actuator-relation}
+
+Cơ cấu chấp hành không hoạt động độc lập. Nó nhận quyết định từ lớp điều khiển, còn lớp điều khiển lại phụ thuộc vào dữ liệu cảm biến và kết quả xử lý. Trong project, camera RGB-D và YOLO phát hiện mục tiêu, Object Localization tính pose mục tiêu, TF chuyển pose sang frame \texttt{map}, Mission Manager tạo goal, Nav2 sinh lệnh \texttt{/cmd\_vel}, sau đó cơ cấu vi sai thực hiện chuyển động.
+
+\begin{equation}
+    \text{Detection}
+    \rightarrow
+    \text{3D Localization}
+    \rightarrow
+    \text{Goal}
+    \rightarrow
+    \texttt{/cmd\_vel}
+    \rightarrow
+    \text{Wheel Motion}
+    \label{eq:detection-to-motion-flow}
+\end{equation}
+
+\begin{table}[H]
+    \centering
+    \caption{Quan hệ giữa cảm biến, xử lý và cơ cấu chấp hành}
+    \label{tab:sensor-actuator-relation}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.22\textwidth}|>{\raggedright\arraybackslash}p{0.34\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Giai đoạn} & \textbf{Dữ liệu chính} & \textbf{Vai trò} \\
+        \hline
+        Nhận diện & Ảnh RGB, detection YOLO & Xác định có mục tiêu trong ảnh. \\
+        \hline
+        Định vị mục tiêu & Detection, depth, \texttt{CameraInfo}, TF & Tính vị trí mục tiêu trong không gian. \\
+        \hline
+        Quản lý nhiệm vụ & Pose mục tiêu, pose robot, safe distance & Chọn tuần tra hoặc tiếp cận mục tiêu. \\
+        \hline
+        Điều hướng & Goal, map, costmap, odometry & Tạo lệnh vận tốc phù hợp. \\
+        \hline
+        Chấp hành & \texttt{/cmd\_vel}, vận tốc bánh & Biến lệnh điều khiển thành chuyển động thực tế. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{
+\begin{tikzpicture}[
+  block/.style={draw, rectangle, fill=blue!5, align=center, minimum height=1cm, text width=2.2cm},
+  >=Latex, node distance=0.8cm
+]
+\node[block] (yolo) {YOLOv8n\\(BBox)};
+\node[block, right=of yolo] (loc) {Localization\\(Pose 3D)};
+\node[block, right=of loc] (mission) {Mission Mgr\\(Goal)};
+\node[block, right=of mission] (nav2) {Nav2\\(\texttt{/cmd\_vel})};
+\node[block, right=of nav2] (wheels) {Động cơ\\(Quay bánh)};
+
+\draw[->, thick] (yolo) -- (loc);
+\draw[->, thick] (loc) -- (mission);
+\draw[->, thick] (mission) -- (nav2);
+\draw[->, thick] (nav2) -- (wheels);
+\end{tikzpicture}
+}
+\caption{Chuỗi xử lý từ phát hiện mục tiêu đến chuyển động bánh xe}
+\label{fig:detection-to-wheel-motion}
+\end{figure}
+
+\subsection{Luồng dữ liệu chính trong Chương 5}
+\label{subsec:chapter5-data-flow}
+
+\begin{table}[H]
+    \centering
+    \caption{Luồng dữ liệu chính trong Chương 5}
+    \label{tab:chapter5-data-flow}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\centering\arraybackslash}p{0.08\textwidth}|>{\raggedright\arraybackslash}p{0.24\textwidth}|>{\raggedright\arraybackslash}p{0.30\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Bước} & \textbf{Khối xử lý} & \textbf{Input} & \textbf{Output} \\
+        \hline
+        1 & Patrol Node & Danh sách waypoint & Goal tuần tra cho Nav2. \\
+        \hline
+        2 & Mission Manager & Pose mục tiêu và trạng thái robot & Tín hiệu tạm dừng tuần tra, safe goal. \\
+        \hline
+        3 & Nav2 & Goal, map, costmap, odometry, TF & Lệnh \texttt{/cmd\_vel}. \\
+        \hline
+        4 & Bộ điều khiển cấp thấp & \texttt{/cmd\_vel} & Vận tốc bánh phải và bánh trái. \\
+        \hline
+        5 & Cơ cấu bánh xe & Vận tốc bánh & Chuyển động robot trong môi trường. \\
+        \hline
+        6 & Encoder/Odometry & Chuyển động bánh & Thông tin phản hồi \texttt{/odom} và TF. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+Luồng dữ liệu trên cho thấy Chương 5 là phần nối giữa thuật toán điều hướng và phần chuyển động vật lý của robot. Các công thức động học giúp giải thích vì sao lệnh \texttt{/cmd\_vel} có thể được chuyển thành chuyển động của hai bánh.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  block/.style={draw, rectangle, fill=cyan!10, align=center, minimum height=1cm, text width=2.5cm},
+  >=Latex
+]
+\node[block] (patrol) at (0, 1.5) {Patrol Node};
+\node[block] (mission) at (0, -1.5) {Mission Manager};
+
+\node[block, fill=green!10] (nav2) at (5, 0) {Nav2\\(Bộ điều khiển)};
+\node[block, fill=orange!10] (base) at (10, 0) {Base Controller\\(Động cơ)};
+
+\draw[->, thick] (patrol.east) -| node[near start, above] {Tuần tra} (nav2.north);
+\draw[->, thick] (mission.east) -| node[near start, below] {Tiếp cận} (nav2.south);
+
+\draw[->, thick] (nav2) -- node[above] {\texttt{/cmd\_vel}} (base);
+\draw[->, thick] (mission) -- node[left] {Dừng/Tiếp tục} (patrol);
+\end{tikzpicture}
+\caption{Sơ đồ khối luồng điều khiển chuyển động từ Patrol/Mission Manager đến cơ cấu bánh xe}
+\label{fig:motion-control-data-flow}
+\end{figure}
+
+\subsection{Đánh giá kỹ thuật lớp chấp hành và điều khiển}
+\label{subsec:actuator-control-assessment}
+
+Cấu trúc truyền động vi sai phù hợp với robot trong nhà vì đơn giản, dễ điều khiển và có khả năng quay với bán kính nhỏ. Việc sử dụng Nav2 giúp giảm đáng kể độ phức tạp của hệ thống vì nhóm phát triển không cần tự xây dựng toàn bộ local planner và global planner từ đầu.
+
+Tuy nhiên, chất lượng chuyển động phụ thuộc vào nhiều yếu tố như tham số controller, costmap, độ chính xác của odometry, tốc độ cập nhật dữ liệu cảm biến và độ trễ giữa các node. Trong mô phỏng, các yếu tố như trượt bánh, sai số động cơ và nhiễu encoder chưa thể hiện đầy đủ như trên robot thật. Vì vậy, khi triển khai thực tế cần hiệu chỉnh lại tham số điều khiển và kiểm tra đáp ứng của robot trong từng môi trường cụ thể.
+
+\begin{table}[H]
+    \centering
+    \caption{Đánh giá kỹ thuật lớp chấp hành và điều khiển}
+    \label{tab:actuator-control-assessment}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Ưu điểm} & \textbf{Hạn chế cần lưu ý} \\
+        \hline
+        Cơ cấu vi sai đơn giản, dễ mô hình hóa và dễ điều khiển. & Dễ bị sai số odometry nếu bánh xe trượt hoặc mặt sàn không đều. \\
+        \hline
+        Nav2 cung cấp sẵn lập đường, bám đường và tránh vật cản. & Cần tinh chỉnh controller, costmap và giới hạn vận tốc để robot chạy mượt. \\
+        \hline
+        Patrol Node và Mission Manager tách biệt rõ nhiệm vụ và điều khiển. & Mission Manager hiện còn đơn giản, chưa phải behavior tree đầy đủ. \\
+        \hline
+        Luồng \texttt{/cmd\_vel} chuẩn ROS2, dễ mở rộng sang robot thật. & Khi robot thật hoạt động, cần kiểm tra độ trễ và giới hạn động cơ. \\
+        \hline
+    \end{tabularx}
+\end{table}
 
 \subsection{Kết luận chương}
+\label{subsec:actuator-control-conclusion}
 
-Chương này đã trình bày cơ cấu chấp hành của TurtleBot4 và cách hệ thống điều khiển chuyển động thông qua Nav2, Patrol Node và Mission Manager. Phân tích cho thấy cơ cấu chấp hành không hoạt động độc lập mà luôn phụ thuộc vào dữ liệu cảm biến và quyết định điều hướng cấp cao.
+Chương này đã phân tích lớp cơ cấu chấp hành và điều khiển chuyển động của TurtleBot4. Hệ thống sử dụng truyền động vi sai, nhận lệnh vận tốc từ Nav2 và thực hiện chuyển động thông qua hai bánh chủ động. Nav2 đóng vai trò điều khiển cấp cao, Patrol Node tạo hành vi tuần tra, còn Mission Manager điều phối quá trình tạm dừng tuần tra và tiếp cận mục tiêu an toàn.
+
+Phân tích cho thấy mối liên hệ giữa cảm biến và chấp hành là điểm cốt lõi của robot tự hành: cảm biến cung cấp dữ liệu, thuật toán tạo quyết định, Nav2 sinh lệnh vận tốc và cơ cấu truyền động biến lệnh đó thành chuyển động.

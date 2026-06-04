@@ -1,40 +1,294 @@
-﻿\section{KẾT LUẬN}
+\providecommand{\placeholderfigure}[3]{%
+    \begin{figure}[H]
+        \centering
+        \fbox{%
+            \parbox[c][4.0cm][c]{0.88\textwidth}{%
+                \centering
+                \textit{#1}%
+            }%
+        }
+        \caption{#2}
+        \label{#3}
+    \end{figure}
+}
+
+\section{KẾT LUẬN}
+\label{sec:conclusion}
+
+Chương 8 là phần tổng kết toàn bộ đề tài nghiên cứu và xây dựng hệ thống robot tự hành TurtleBot4 trong môi trường mô phỏng. Nội dung chương không chỉ nhắc lại kết quả đạt được, mà còn làm rõ ý nghĩa của đề tài đối với học phần \textit{Cảm biến và Cơ cấu chấp hành}, chỉ ra các hạn chế còn tồn tại và định hướng phát triển nếu triển khai tiếp trên robot thật.
+
+Khác với các chương trước tập trung vào cơ sở lý thuyết, kiến trúc, cảm biến, chấp hành, triển khai và đánh giá, Chương 8 có vai trò tổng hợp. Chương này cần thể hiện được mối liên hệ giữa các phần đã trình bày: cảm biến cung cấp dữ liệu, thuật toán xử lý dữ liệu, Nav2 lập kế hoạch và cơ cấu truyền động vi sai thực hiện chuyển động.
 
 \subsection{Kết luận chung}
+\label{subsec:general-conclusion}
 
-Báo cáo đã trình bày quá trình nghiên cứu và xây dựng hệ thống robot tự hành TurtleBot4 trong môi trường mô phỏng sử dụng ROS2, SLAM, Nav2 và YOLOv8. Dưới góc nhìn của học phần \textit{Cảm biến và Cơ cấu chấp hành}, đề tài thể hiện rõ mối liên hệ giữa hệ thống đo lường, xử lý thông tin, lập kế hoạch và thực thi chuyển động.
+Đề tài đã xây dựng được một hệ thống robot tự hành dựa trên nền tảng TurtleBot4 Lite, ROS2 Humble, Gazebo/Ignition, SLAM Toolbox, Nav2 và YOLOv8n. Hệ thống được triển khai theo hướng mô phỏng, nhưng vẫn phản ánh tương đối đầy đủ cấu trúc của một robot di động tự hành hiện đại: có lớp cảm biến, lớp xử lý -- ra quyết định và lớp cơ cấu chấp hành.
 
-Hệ thống đã tích hợp được các cảm biến quan trọng gồm LiDAR, camera RGB-D, odometry và TF. LiDAR đóng vai trò chính trong SLAM và navigation; camera RGB-D hỗ trợ nhận diện và định vị mục tiêu; odometry cung cấp thông tin chuyển động liên tục; TF đảm bảo quan hệ hình học giữa các frame. Các nguồn dữ liệu này được xử lý bởi ROS2 để tạo thành thông tin có ý nghĩa phục vụ điều khiển robot.
+Về mặt cảm biến, hệ thống sử dụng LiDAR để đo khoảng cách và phục vụ SLAM/navigation; camera RGB-D OAK-D để nhận ảnh màu, ảnh chiều sâu và hỗ trợ định vị mục tiêu; odometry để ước lượng chuyển động tương đối của robot; TF/TF2 để liên kết các hệ tọa độ. Những dữ liệu này được xử lý trong ROS2 để tạo thành thông tin trạng thái có ý nghĩa cho điều khiển robot.
 
-Về cơ cấu chấp hành, TurtleBot4 sử dụng truyền động vi sai, nhận lệnh vận tốc từ Nav2 và thực hiện chuyển động trong môi trường. Nav2 đóng vai trò lớp điều khiển chuyển động cấp cao, chuyển goal từ Patrol Node hoặc Mission Manager thành lệnh vận tốc phù hợp. Mission Manager cho phép robot chuyển đổi hành vi từ tuần tra sang tiếp cận mục tiêu, qua đó minh họa cách cảm biến ảnh hưởng trực tiếp tới quyết định chấp hành.
+Về mặt điều khiển và chấp hành, robot sử dụng truyền động vi sai. Nav2 đóng vai trò điều khiển chuyển động cấp cao bằng cách nhận goal, lập đường đi, tính lệnh vận tốc và gửi lệnh đến robot. Mission Manager đóng vai trò điều phối hành vi, quyết định khi nào robot tuần tra, khi nào tạm dừng tuần tra và khi nào tiếp cận mục tiêu.
+
+\begin{table}[H]
+    \centering
+    \caption{Tổng kết các nội dung kỹ thuật chính của đề tài}
+    \label{tab:technical-summary}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.25\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Nội dung tổng kết} & \textbf{Ý nghĩa kỹ thuật} \\
+        \hline
+        Nền tảng triển khai & ROS2, Gazebo/Ignition, TurtleBot4 Lite, Nav2, SLAM Toolbox và YOLOv8n được kết hợp thành một hệ thống thống nhất. \\
+        \hline
+        Cảm biến & LiDAR, RGB-D camera, odometry và TF cung cấp dữ liệu cần thiết cho nhận thức môi trường và định vị. \\
+        \hline
+        Xử lý dữ liệu & Dữ liệu cảm biến được chuyển thành bản đồ, pose robot, detection 2D và pose mục tiêu 3D. \\
+        \hline
+        Điều khiển & Nav2 chuyển goal thành lệnh vận tốc để robot di chuyển an toàn trong môi trường. \\
+        \hline
+        Điều phối nhiệm vụ & Mission Manager kết nối kết quả nhận diện mục tiêu với hành vi tiếp cận và quay lại tuần tra. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.95\textwidth}{!}{
+    \begin{tikzpicture}[
+        font=\small,
+        node distance=1.8cm and 1.2cm,
+        block/.style={rectangle, rounded corners=3pt, draw=black, thick, align=center, minimum height=1.2cm, minimum width=2.8cm, fill=white},
+        arrow/.style={-{Stealth[length=2.5mm]}, thick}
+    ]
+    \node[block, fill=green!10] (sensor) {Cảm biến\\(LiDAR, OAK-D, Odom)};
+    \node[block, fill=orange!10, right=of sensor] (process) {Xử lý \& Định vị\\(SLAM, YOLOv8)};
+    \node[block, fill=blue!10, right=of process] (control) {Điều khiển \& Điều phối\\(Nav2, Mission Mgr)};
+    \node[block, fill=red!10, right=of control] (actuator) {Chấp hành\\(Vi sai)};
+
+    \draw[arrow] (sensor) -- node[above, font=\footnotesize, align=center] {Dữ liệu đo\\thô} (process);
+    \draw[arrow] (process) -- node[above, font=\footnotesize, align=center] {Pose, Map,\\Target} (control);
+    \draw[arrow] (control) -- node[above, font=\footnotesize, align=center] {\texttt{/cmd\_vel}} (actuator);
+    
+    \draw[arrow] (actuator.south) -- ++(0,-0.8) -| node[pos=0.25, below, font=\footnotesize] {Tương tác môi trường và cập nhật trạng thái} (sensor.south);
+    \end{tikzpicture}
+    }
+    \caption{Sơ đồ tổng kết quan hệ cảm biến -- xử lý -- điều khiển -- chấp hành của hệ thống TurtleBot4}
+    \label{fig:conclusion-sensor-processing-control-actuation}
+\end{figure}
 
 \subsection{Các nội dung đã hoàn thành}
+\label{subsec:completed-work}
 
-Trong quá trình thực hiện, báo cáo đã hoàn thành các nội dung sau:
+Các nội dung đã hoàn thành có thể được nhóm thành bốn hướng chính: nghiên cứu lý thuyết, thiết kế kiến trúc, triển khai chức năng và đánh giá hệ thống. Cách nhóm này giúp phần kết luận không bị liệt kê rời rạc mà thể hiện rõ quá trình phát triển của đề tài từ nền tảng lý thuyết đến hệ thống vận hành.
 
-\begin{itemize}
-    \item Phân tích bối cảnh, mục tiêu và phạm vi của bài toán robot tự hành TurtleBot4.
-    \item Trình bày cơ sở lý thuyết về cảm biến, cơ cấu chấp hành, SLAM, Nav2, YOLOv8 và robot vi sai.
-    \item Thiết kế kiến trúc hệ thống ROS2 theo hướng module hóa.
-    \item Phân tích pipeline cảm biến gồm LiDAR, RGB-D camera, odometry và TF.
-    \item Phân tích cách nhận diện mục tiêu bằng YOLOv8n và định vị mục tiêu bằng ảnh depth.
-    \item Phân tích cơ cấu chấp hành vi sai và luồng điều khiển chuyển động thông qua Nav2.
-    \item Triển khai logic nhiệm vụ gồm tuần tra, phát hiện mục tiêu, tiếp cận an toàn và quay lại tuần tra.
-    \item Đánh giá kết quả mô phỏng, hạn chế và hướng phát triển.
-\end{itemize}
+\begin{table}[H]
+    \centering
+    \caption{Các nội dung đã hoàn thành}
+    \label{tab:completed-work}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.21\textwidth}|>{\raggedright\arraybackslash}p{0.42\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Nhóm nội dung} & \textbf{Kết quả đã hoàn thành} & \textbf{Vai trò trong đề tài} \\
+        \hline
+        Nghiên cứu lý thuyết & Trình bày cơ sở về robot tự hành, cảm biến, cơ cấu chấp hành, SLAM, Nav2, YOLOv8 và robot vi sai. & Làm nền tảng để hiểu nguyên lý hoạt động của toàn hệ thống. \\
+        \hline
+        Thiết kế kiến trúc & Tổ chức hệ thống theo các package ROS2 như bringup, vision, localization, patrol và mission manager. & Giúp hệ thống dễ mở rộng, dễ debug và có cấu trúc rõ ràng. \\
+        \hline
+        Xử lý cảm biến & Tích hợp LiDAR, camera RGB-D, odometry và TF; xử lý detection và depth để tạo pose mục tiêu. & Cung cấp dữ liệu đầu vào cho SLAM, navigation và mission logic. \\
+        \hline
+        Điều hướng và chấp hành & Sử dụng Nav2 để gửi goal, lập đường đi, tạo lệnh vận tốc và điều khiển robot vi sai. & Chuyển mục tiêu điều hướng thành chuyển động thực tế của robot. \\
+        \hline
+        Nhiệm vụ tự hành & Triển khai logic tuần tra, phát hiện mục tiêu, tiếp cận an toàn và quay lại tuần tra. & Thể hiện khả năng phối hợp giữa perception, localization, planning và control. \\
+        \hline
+        Đánh giá hệ thống & Tổng hợp kết quả mô phỏng, nhận xét ưu điểm, hạn chế và hướng phát triển. & Làm cơ sở để cải tiến khi triển khai trên robot thật. \\
+        \hline
+    \end{tabularx}
+\end{table}
 
-\subsection{Ý nghĩa đối với học phần}
+Nhìn tổng thể, đề tài đã hoàn thành mục tiêu ở mức tích hợp chức năng. Robot có thể được mô phỏng, nhận dữ liệu cảm biến, xử lý nhận diện mục tiêu, tính vị trí mục tiêu và gửi nhiệm vụ điều hướng. Đây là kết quả quan trọng vì nó chứng minh các khối phần mềm đã giao tiếp được với nhau theo đúng mô hình của một hệ robot tự hành.
 
-Đề tài giúp củng cố kiến thức của học phần theo hướng ứng dụng thực tế. Thay vì khảo sát cảm biến và cơ cấu chấp hành một cách riêng lẻ, báo cáo đặt chúng trong một hệ robot hoàn chỉnh. Qua đó, có thể thấy cảm biến quyết định robot biết gì về môi trường, còn cơ cấu chấp hành quyết định robot có thể làm gì trong môi trường đó. Giữa hai lớp này là các thuật toán xử lý, lập kế hoạch và điều khiển.
+\subsection{Ý nghĩa đối với học phần Cảm biến và Cơ cấu chấp hành}
+\label{subsec:course-relevance}
 
-Cách tiếp cận này phù hợp với xu hướng robotics hiện đại, nơi kỹ sư không chỉ cần hiểu từng linh kiện mà còn phải hiểu cách tích hợp cảm biến, phần mềm và truyền động thành một hệ thống đáng tin cậy.
+Ý nghĩa lớn nhất của đề tài là đặt cảm biến và cơ cấu chấp hành trong một hệ thống robot hoàn chỉnh. Khi học riêng từng loại cảm biến hoặc từng dạng cơ cấu chấp hành, người học có thể hiểu nguyên lý hoạt động của từng phần tử riêng lẻ. Tuy nhiên, trong robot tự hành, giá trị của cảm biến và cơ cấu chấp hành chỉ thể hiện đầy đủ khi chúng được tích hợp trong một vòng kín điều khiển.
 
-\subsection{Hạn chế và định hướng tiếp theo}
+Trong hệ thống này, cảm biến quyết định robot biết gì về môi trường. LiDAR cho biết khoảng cách tới vật cản, camera RGB-D cho biết hình ảnh và chiều sâu, odometry cho biết chuyển động tương đối, TF cho biết quan hệ giữa các frame. Ngược lại, cơ cấu chấp hành quyết định robot có thể làm gì với thông tin đó. Nếu cảm biến phát hiện mục tiêu nhưng cơ cấu chấp hành không thể thực hiện lệnh điều hướng, robot vẫn không thể hoàn thành nhiệm vụ.
 
-Do giới hạn thời gian và điều kiện phần cứng, đề tài mới dừng ở mức mô phỏng. Các yếu tố thực tế như nhiễu cảm biến thật, sai số lắp đặt, trượt bánh, độ trễ truyền thông, giới hạn moment động cơ và điều kiện ánh sáng chưa được đánh giá đầy đủ. Trong tương lai, cần triển khai trên TurtleBot4 thật, bổ sung đánh giá định lượng và tối ưu tham số điều hướng.
+Đề tài cũng giúp làm rõ vai trò trung gian của thuật toán. Dữ liệu cảm biến ban đầu thường chỉ là dữ liệu thô như ảnh, scan hoặc odometry. Các thuật toán như SLAM, YOLOv8, Object Localization và Nav2 biến dữ liệu thô thành bản đồ, pose, goal và lệnh vận tốc. Vì vậy, hệ robot tự hành không chỉ gồm phần cứng mà còn là sự kết hợp chặt chẽ giữa cảm biến, phần mềm và truyền động.
 
-Ngoài ra, Mission Manager có thể được nâng cấp thành behavior tree, hỗ trợ nhiều trạng thái phức tạp hơn như tìm kiếm mục tiêu, theo dõi mục tiêu động, tránh vùng cấm, quay về trạm sạc và phối hợp nhiều robot. Đây là các hướng mở rộng có giá trị thực tiễn cao.
+\begin{table}[H]
+    \centering
+    \caption{Ý nghĩa của đề tài đối với học phần}
+    \label{tab:course-relevance}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.23\textwidth}|>{\raggedright\arraybackslash}p{0.37\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Khía cạnh học phần} & \textbf{Biểu hiện trong đề tài} & \textbf{Kiến thức rút ra} \\
+        \hline
+        Cảm biến & LiDAR, RGB-D camera, odometry, TF. & Cảm biến cung cấp dữ liệu đo và quyết định chất lượng nhận thức môi trường. \\
+        \hline
+        Xử lý tín hiệu/dữ liệu & SLAM, YOLOv8, depth processing, transform frame. & Dữ liệu cần được xử lý, lọc, chuyển đổi và đặt trong hệ tọa độ phù hợp. \\
+        \hline
+        Cơ cấu chấp hành & Truyền động vi sai, lệnh \texttt{/cmd\_vel}, bánh trái và bánh phải. & Lệnh điều khiển phải được biến thành chuyển động vật lý. \\
+        \hline
+        Điều khiển hệ thống & Nav2 và Mission Manager. & Robot cần lớp điều khiển cấp cao để lập kế hoạch và lớp điều phối để chọn hành vi. \\
+        \hline
+    \end{tabularx}
+\end{table}
 
-\subsection{Lời kết}
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        font=\small,
+        node distance=1.5cm and 2.0cm,
+        block/.style={rectangle, draw=black, thick, rounded corners=3pt, fill=white, align=center, minimum height=1cm, minimum width=5cm},
+        arrow/.style={-{Stealth[length=2.5mm]}, thick}
+    ]
+    % Nodes
+    \node[block, fill=green!10] (sensor) {\textbf{Lớp Cảm biến}\\(Thu thập dữ liệu \& Nhận thức)};
+    \node[block, fill=orange!10, below=of sensor] (algo) {\textbf{Lớp Thuật toán \& Điều khiển}\\(Ra quyết định \& Phần mềm)};
+    \node[block, fill=red!10, below=of algo] (actuator) {\textbf{Lớp Chấp hành}\\(Thực thi chuyển động \& Phần cứng)};
+    
+    % Connections
+    \draw[arrow] (sensor) -- node[right, font=\footnotesize] {Dữ liệu đo (Ảnh, Scan, TF)} (algo);
+    \draw[arrow] (algo) -- node[right, font=\footnotesize] {Lệnh điều khiển (\texttt{/cmd\_vel})} (actuator);
+    \draw[arrow] (actuator.west) -- ++(-1.5,0) |- node[pos=0.25, left, align=center, font=\footnotesize] {Thay đổi\\trạng thái\\vật lý} (sensor.west);
+    
+    \end{tikzpicture}
+    \caption{Mối quan hệ giữa cảm biến, thuật toán xử lý và cơ cấu chấp hành trong học phần}
+    \label{fig:course-sensor-algorithm-actuator-relation}
+\end{figure}
 
-Thông qua đề tài này, em đã hiểu sâu hơn vai trò của cảm biến và cơ cấu chấp hành trong hệ robot tự hành, đồng thời có cơ hội thực hành với ROS2, Gazebo/Ignition, SLAM, Nav2 và YOLOv8. Những kiến thức và kinh nghiệm này là nền tảng quan trọng để tiếp tục nghiên cứu các hệ robot thông minh trong tương lai.
+\subsection{Hạn chế của đề tài}
+\label{subsec:project-limitations}
+
+Mặc dù hệ thống đã thể hiện được luồng nhiệm vụ tự hành trong mô phỏng, đề tài vẫn còn một số hạn chế cần được nhìn nhận rõ. Các hạn chế này không làm mất ý nghĩa của đề tài, nhưng là cơ sở để xác định những phần cần cải tiến trong giai đoạn tiếp theo.
+
+\begin{table}[H]
+    \centering
+    \caption{Hạn chế của đề tài}
+    \label{tab:project-limitations}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.23\textwidth}|>{\raggedright\arraybackslash}p{0.34\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Hạn chế} & \textbf{Nguyên nhân} & \textbf{Ảnh hưởng} \\
+        \hline
+        Chưa triển khai trên robot thật & Đề tài giới hạn trong môi trường mô phỏng Gazebo/Ignition. & Chưa đánh giá được nhiễu cảm biến thật, trượt bánh, sai số lắp đặt và độ trễ truyền thông. \\
+        \hline
+        Chưa tối ưu sâu Nav2 & Planner, controller và costmap mới ở mức cấu hình cơ bản. & Robot có thể chưa đạt chuyển động mượt trong môi trường phức tạp. \\
+        \hline
+        Waypoint tuần tra còn đơn giản & Danh sách waypoint được thiết kế cố định cho kịch bản mô phỏng. & Tính linh hoạt khi thay đổi môi trường còn hạn chế. \\
+        \hline
+        Mission Manager còn đơn giản & Logic chủ yếu gồm hai trạng thái tuần tra và tiếp cận mục tiêu. & Chưa xử lý được nhiều tình huống như mất mục tiêu, mục tiêu động hoặc nhiều mục tiêu. \\
+        \hline
+        Định vị mục tiêu phụ thuộc depth & Pose mục tiêu được tính từ bbox và ảnh depth. & Kết quả có thể bị ảnh hưởng khi depth nhiễu, vật thể bị che khuất hoặc bbox không chính xác. \\
+        \hline
+        Chưa có đánh giá định lượng đầy đủ & Chưa xây dựng bộ chỉ số thử nghiệm chi tiết. & Khó so sánh chất lượng hệ thống giữa các lần cấu hình khác nhau. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+Các hạn chế trên cho thấy sự khác biệt giữa mô phỏng và thực nghiệm. Trong mô phỏng, nhiều yếu tố như ánh sáng, ma sát, sai số cơ khí hoặc độ trễ truyền thông thường được đơn giản hóa. Khi chuyển sang robot thật, các yếu tố này có thể ảnh hưởng đáng kể đến kết quả điều hướng và nhận diện mục tiêu.
+
+\subsection{Định hướng phát triển tiếp theo}
+\label{subsec:future-directions}
+
+Từ các hạn chế đã nêu, hệ thống có thể được phát triển theo nhiều hướng. Các hướng phát triển nên được chia thành nhóm phần cứng, nhóm thuật toán, nhóm phần mềm hệ thống và nhóm đánh giá định lượng để dễ triển khai.
+
+\begin{table}[H]
+    \centering
+    \caption{Định hướng phát triển tiếp theo}
+    \label{tab:future-directions}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.24\textwidth}|>{\raggedright\arraybackslash}p{0.38\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Nhóm phát triển} & \textbf{Hướng cải tiến} & \textbf{Kết quả mong muốn} \\
+        \hline
+        Triển khai thực nghiệm & Chạy hệ thống trên TurtleBot4 thật, hiệu chỉnh LiDAR, camera, odometry và TF. & Đánh giá được sai số thực tế và độ ổn định khi robot vận hành ngoài mô phỏng. \\
+        \hline
+        Tối ưu điều hướng & Tinh chỉnh planner, controller, local costmap, global costmap và recovery behavior của Nav2. & Robot di chuyển mượt hơn, ít dao động hơn và tránh vật cản tốt hơn. \\
+        \hline
+        Cải tiến Mission Manager & Xây dựng finite state machine hoặc behavior tree. & Hệ thống có khả năng xử lý nhiều trạng thái phức tạp hơn. \\
+        \hline
+        Nâng cấp nhận diện & Huấn luyện YOLO custom cho các đối tượng chuyên biệt. & Tăng độ chính xác nhận diện trong môi trường ứng dụng cụ thể. \\
+        \hline
+        Theo dõi mục tiêu & Bổ sung multi-object tracking và lọc vị trí mục tiêu theo thời gian. & Robot theo dõi mục tiêu ổn định hơn, giảm nhiễu pose. \\
+        \hline
+        Đánh giá định lượng & Ghi log thời gian tiếp cận, sai số định vị, tỷ lệ phát hiện đúng và tỷ lệ hoàn thành nhiệm vụ. & Có cơ sở khách quan để so sánh và tối ưu hệ thống. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.95\textwidth}{!}{
+    \begin{tikzpicture}[
+        font=\small,
+        node distance=1.0cm,
+        stepbox/.style={rectangle, draw=black, thick, rounded corners=3pt, align=center, minimum height=1.2cm, minimum width=3.2cm},
+        arrow/.style={-{Stealth[length=3mm]}, ultra thick, draw=gray}
+    ]
+    
+    \node[stepbox, fill=gray!20] (sim) {\textbf{Giai đoạn 1}\\Mô phỏng chức năng\\(Gazebo, ROS2)};
+    \node[stepbox, fill=cyan!10, right=of sim] (real) {\textbf{Giai đoạn 2}\\Triển khai thực tế\\(TurtleBot4 thật)};
+    \node[stepbox, fill=yellow!10, right=of real] (opt) {\textbf{Giai đoạn 3}\\Tối ưu \& Nâng cấp\\(Behavior Tree)};
+    \node[stepbox, fill=green!10, right=of opt] (eval) {\textbf{Giai đoạn 4}\\Đánh giá định lượng\\(Đo lường sai số)};
+    
+    \draw[arrow] (sim) -- (real);
+    \draw[arrow] (real) -- (opt);
+    \draw[arrow] (opt) -- (eval);
+    
+    % Details under steps
+    \node[below=0.2cm of sim, align=center, font=\footnotesize, text width=3.2cm] {Đã hoàn thành\\trong báo cáo};
+    \node[below=0.2cm of real, align=center, font=\footnotesize, text width=3.2cm] {Hiệu chỉnh cảm biến,\\xử lý nhiễu thật};
+    \node[below=0.2cm of opt, align=center, font=\footnotesize, text width=3.2cm] {Tinh chỉnh costmap,\\xử lý đa mục tiêu};
+    \node[below=0.2cm of eval, align=center, font=\footnotesize, text width=3.2cm] {Thu thập log,\\đánh giá hiệu năng};
+    
+    \end{tikzpicture}
+    }
+    \caption{Sơ đồ định hướng phát triển từ mô phỏng sang robot thật}
+    \label{fig:simulation-to-real-roadmap}
+\end{figure}
+
+Trong các hướng trên, triển khai trên robot thật là bước quan trọng nhất nếu muốn kiểm chứng khả năng ứng dụng thực tế. Sau đó, việc tối ưu Nav2, cải tiến Mission Manager và bổ sung đánh giá định lượng sẽ giúp hệ thống từ mức demo chức năng tiến tới mức hệ thống có thể kiểm thử và so sánh một cách khoa học.
+
+\subsection{Tổng hợp giá trị đạt được của đề tài}
+\label{subsec:project-values}
+
+Có thể tổng hợp giá trị của đề tài theo ba nhóm: giá trị học thuật, giá trị kỹ thuật và giá trị thực tiễn. Cách nhìn này giúp phần kết luận có chiều sâu hơn, thay vì chỉ dừng ở việc liệt kê các công việc đã hoàn thành.
+
+\begin{table}[H]
+    \centering
+    \caption{Tổng hợp giá trị đạt được của đề tài}
+    \label{tab:project-values}
+    \renewcommand{\arraystretch}{1.25}
+    \small
+    \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{0.23\textwidth}|>{\raggedright\arraybackslash}X|}
+        \hline
+        \textbf{Loại giá trị} & \textbf{Nội dung thể hiện} \\
+        \hline
+        Giá trị học thuật & Đề tài giúp củng cố kiến thức về cảm biến, cơ cấu chấp hành, robot tự hành, SLAM, navigation và nhận diện đối tượng. \\
+        \hline
+        Giá trị kỹ thuật & Đề tài thể hiện quy trình tích hợp nhiều module ROS2 thành một pipeline hoàn chỉnh, gồm perception, localization, planning, mission management và actuation. \\
+        \hline
+        Giá trị thực tiễn & Mô hình có thể làm nền tảng cho robot tuần tra kho, robot giám sát, robot dịch vụ hoặc các bài toán tìm kiếm mục tiêu trong môi trường trong nhà. \\
+        \hline
+        Giá trị mở rộng & Kiến trúc module hóa cho phép thay thế hoặc nâng cấp từng phần như YOLO, Nav2, Mission Manager hoặc cảm biến mà không phải viết lại toàn bộ hệ thống. \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+Như vậy, đề tài không chỉ giúp người thực hiện hiểu cách chạy một hệ thống robot trong ROS2 mà còn giúp hình thành tư duy thiết kế hệ thống. Người học cần biết cảm biến tạo dữ liệu gì, dữ liệu đó được xử lý như thế nào, thuật toán ra quyết định ra sao và cơ cấu chấp hành thực hiện quyết định đó bằng cách nào.
+
+\subsection{Kết luận cuối cùng}
+\label{subsec:final-conclusion}
+
+Thông qua đề tài nghiên cứu và xây dựng hệ thống robot tự hành TurtleBot4 trong môi trường mô phỏng, có thể khẳng định rằng mục tiêu cơ bản của báo cáo đã được đáp ứng. Hệ thống đã tích hợp được các thành phần quan trọng của một robot tự hành gồm cảm biến, xử lý dữ liệu, lập bản đồ, điều hướng, nhận diện mục tiêu, điều phối nhiệm vụ và chấp hành chuyển động.
+
+Kết quả đạt được cho thấy mối liên hệ chặt chẽ giữa cảm biến và cơ cấu chấp hành. Cảm biến giúp robot nhận biết môi trường và mục tiêu; thuật toán biến dữ liệu cảm biến thành thông tin điều khiển; cơ cấu chấp hành biến lệnh điều khiển thành chuyển động. Đây chính là nội dung cốt lõi của học phần \textit{Cảm biến và Cơ cấu chấp hành} trong một bài toán robot hiện đại.
+
+Trong tương lai, nếu được triển khai trên robot TurtleBot4 thật, bổ sung đánh giá định lượng và tối ưu các tham số điều hướng, hệ thống có thể trở thành nền tảng tốt cho các ứng dụng robot giám sát, robot tuần tra, robot dịch vụ hoặc nghiên cứu sâu hơn về robot tự hành thông minh.

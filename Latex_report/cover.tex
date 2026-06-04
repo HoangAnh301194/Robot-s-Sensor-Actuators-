@@ -1,49 +1,88 @@
-﻿\thispagestyle{empty}
+\thispagestyle{empty}
+
+% ================= KHUNG TRANG BÌA =================
 \begin{tikzpicture}[overlay,remember picture]
-\draw [line width=3pt]
-    ($ (current page.north west) + (3.0cm,-2.0cm) $)
-    rectangle
-    ($ (current page.south east) + (-2.0cm,2.5cm) $);
-\draw [line width=0.5pt]
-    ($ (current page.north west) + (3.1cm,-2.1cm) $)
-    rectangle
-    ($ (current page.south east) + (-2.1cm,2.6cm) $); 
+    \draw[line width=3pt]
+        ($(current page.north west) + (3.0cm,-2.0cm)$)
+        rectangle
+        ($(current page.south east) + (-2.0cm,2.5cm)$);
+
+    \draw[line width=0.5pt]
+        ($(current page.north west) + (3.1cm,-2.1cm)$)
+        rectangle
+        ($(current page.south east) + (-2.1cm,2.6cm)$);
 \end{tikzpicture}
 
+% ================= NỘI DUNG TRANG BÌA =================
 \begin{center}
-\vspace{-12pt}
-\textbf{\fontsize{16pt}{19pt}\selectfont \textcolor{red}{HỌC VIỆN CÔNG NGHỆ BƯU CHÍNH VIỄN THÔNG}}\\
-\textbf{\fontsize{15pt}{18pt}\selectfont KHOA KỸ THUẬT ĐIỆN TỬ 1}
 
-\vspace{1cm}
-\begin{figure}[H]
+\vspace*{-0.3cm}
+
+\textbf{
+    \fontsize{16pt}{19pt}\selectfont
+    \textcolor{red}{HỌC VIỆN CÔNG NGHỆ BƯU CHÍNH VIỄN THÔNG}
+}\\[4pt]
+
+\textbf{
+    \fontsize{15pt}{18pt}\selectfont
+    KHOA KỸ THUẬT ĐIỆN TỬ 1
+}
+
+\vspace{0.65cm}
+
+\includegraphics[width=0.27\textwidth]{logoPTIT.png}
+
+\vspace{0.55cm}
+
+\textbf{
+    \fontsize{25pt}{30pt}\selectfont
+    BÁO CÁO CUỐI KỲ
+}
+
+\vspace{0.65cm}
+
+\textbf{
+    \fontsize{22pt}{26pt}\selectfont
+    CẢM BIẾN VÀ CƠ CẤU CHẤP HÀNH
+}
+
+\vspace{0.65cm}
+
+\parbox{13cm}{
     \centering
-    \includegraphics[width=0.30\textwidth]{logoPTIT.png}
-\end{figure}
+    \textbf{
+        \fontsize{17pt}{21pt}\selectfont
+        MÔ PHỎNG HỆ THỐNG ROBOT TỰ HÀNH TURTLEBOT4
+    }
+}
 
 \vspace{0.8cm}
-\textbf{\fontsize{26pt}{31pt}\selectfont BÁO CÁO CUỐI KỲ}
-\vspace{0.8cm}
-\end{center}
 
-\begin{center}
-\textbf{\fontsize{18pt}{22pt}\selectfont HỌC PHẦN: CẢM BIẾN VÀ CƠ CẤU CHẤP HÀNH}
+% ================= THÔNG TIN GIẢNG VIÊN VÀ SINH VIÊN =================
+\begin{tabular}{
+    @{}
+    >{\fontsize{12pt}{15pt}\selectfont\bfseries}l
+    >{\fontsize{13pt}{16pt}\selectfont\bfseries}l
+    @{}
+}
+    Giảng viên hướng dẫn:
+        & TS. Phạm Hoàng Anh \\[8pt]
 
-\vspace{0.8cm}
-\textbf{\fontsize{20pt}{24pt}\selectfont NGHIÊN CỨU VÀ XÂY DỰNG HỆ THỐNG ROBOT TỰ HÀNH TURTLEBOT4 TRONG MÔI TRƯỜNG MÔ PHỎNG SỬ DỤNG ROS2, SLAM, NAV2 VÀ YOLOV8}
+    Sinh viên thực hiện:
+        & Nguyễn Hữu Hoàng Anh -- B23DCDK007 \\[2pt]
 
-\vspace{1.2cm}
-\begin{table}[H]
-    \centering
-    \begin{tabular}{l p{7.5cm}}
-    \fontsize{12pt}{14pt}\selectfont \textbf{Giảng viên hướng dẫn:} & \fontsize{14pt}{16pt}\selectfont \textbf{TS. Phạm Hoàng Anh}\\[10pt]
-    \fontsize{12pt}{14pt}\selectfont \textbf{Sinh viên thực hiện:} & \fontsize{14pt}{16pt}\selectfont \textbf{Nguyễn Hữu Hoàng Anh}\\[10pt]
-    \fontsize{12pt}{14pt}\selectfont \textbf{Mã sinh viên:} & \fontsize{14pt}{16pt}\selectfont \textbf{B23DCDK007}\\[10pt]
-    \fontsize{12pt}{14pt}\selectfont \textbf{Lớp:} & \fontsize{14pt}{16pt}\selectfont \textbf{D23CQDKRB}
-    \end{tabular}
-\end{table}
+        & Phạm Tuấn Anh -- B23DCDK012 \\[2pt]
 
-\vspace{1.7cm}
-\fontsize{14pt}{16pt}\selectfont Hà Nội, ngày 04 tháng 06 năm 2026
+        & Nguyễn Hoàng Anh -- B23DCDK006 \\[2pt]
+
+        & Nguyễn Xuân Nhật -- B23DCDK094
+\end{tabular}
+
+\vfill
+
+\fontsize{14pt}{17pt}\selectfont
+Hà Nội, ngày 04 tháng 06 năm 2026
+
+\vspace*{0.2cm}
 \end{center}
 \newpage

@@ -1,91 +1,1069 @@
-﻿\section{CƠ SỞ LÝ THUYẾT}
+\providecommand{\placeholderfigure}[3]{%
+    \begin{figure}[H]
+        \centering
+        \fbox{%
+            \parbox[c][3.0cm][c]{0.90\textwidth}{%
+                \centering\small\itshape #1%
+            }%
+        }
+        \caption{#2}
+        \label{#3}
+    \end{figure}
+}
 
-\subsection{Robot tự hành và vòng kín cảm biến--chấp hành}
+\section{CƠ SỞ LÝ THUYẾT}\label{sec:theory}
 
-Robot tự hành là hệ cơ điện tử có khả năng di chuyển trong môi trường mà không cần điều khiển trực tiếp liên tục từ con người. Để đạt được điều này, robot phải thực hiện chu trình nhận thức và hành động gồm: đo lường môi trường, ước lượng trạng thái, lập bản đồ, lập kế hoạch, phát lệnh điều khiển và thực thi chuyển động.
+\subsection{Robot tự hành và vòng kín cảm biến - xử lý - điều khiển - chấp hành}\label{subsec:autonomous-loop}
 
-Dưới góc nhìn hệ thống, robot tự hành có thể được biểu diễn bởi vòng kín:
+Robot tự hành là một hệ cơ điện tử có khả năng di chuyển và thực hiện
+nhiệm vụ trong môi trường mà không cần con người điều khiển trực tiếp
+liên tục. Để tự hành, robot phải thu nhận dữ liệu từ môi trường, ước
+lượng trạng thái của bản thân, xây dựng hoặc sử dụng bản đồ, lập kế
+hoạch đường đi, tạo lệnh điều khiển và biến lệnh điều khiển thành chuyển
+động vật lý thông qua cơ cấu chấp hành.
 
-\[
-\text{Môi trường} \rightarrow \text{Cảm biến} \rightarrow \text{Xử lý/Ước lượng} \rightarrow \text{Điều khiển} \rightarrow \text{Cơ cấu chấp hành} \rightarrow \text{Môi trường}
-\]
+Trong đề tài này, robot TurtleBot4 được triển khai trong môi trường mô
+phỏng Gazebo/Ignition. Hệ thống sử dụng LiDAR để đo khoảng cách phục vụ
+SLAM và tránh vật cản, camera RGB-D OAK-D để phát hiện và định vị mục
+tiêu, odometry/encoder để ước lượng chuyển động, TF/TF2 để quản lý hệ
+tọa độ, Nav2 để điều hướng, YOLOv8 để nhận diện đối tượng và Mission
+Manager để điều phối hành vi.
 
-Trong vòng kín này, cảm biến quyết định chất lượng thông tin đầu vào, còn cơ cấu chấp hành quyết định khả năng biến quyết định điều khiển thành chuyển động thực tế. Sai số hoặc độ trễ ở một khâu đều có thể ảnh hưởng trực tiếp đến tính ổn định và độ tin cậy của toàn bộ robot.
+Vòng kín hoạt động của robot tự hành có thể mô tả như sau:
+\begin{gather*}
+\begin{aligned}
+\text{Môi trường} &\rightarrow \text{Cảm biến} \rightarrow \text{Xử lý/ước lượng} \\
+&\rightarrow \text{Điều khiển} \rightarrow \text{Cơ cấu chấp hành} \rightarrow \text{Môi trường}.
+\end{aligned}
+\end{gather*}
+Trong vòng kín này, cảm biến tạo dữ liệu đầu vào; các thuật toán xử lý
+biến dữ liệu đo thành thông tin trạng thái; bộ điều khiển và bộ lập kế
+hoạch tạo lệnh vận tốc hoặc lệnh vị trí; cơ cấu chấp hành biến lệnh điều
+khiển thành chuyển động thực tế. Nếu một khâu có sai số lớn, độ trễ cao
+hoặc mất dữ liệu, toàn bộ hệ thống có thể hoạt động không ổn định.
 
-\subsection{Cảm biến trong robot di động}
+\begin{figure}[H]
+    \centering
+    \resizebox{0.95\textwidth}{!}{
+    \begin{tikzpicture}[
+        font=\small,
+        node distance=1.2cm and 1.0cm,
+        block/.style={
+            rectangle, rounded corners=3pt, draw=black, thick,
+            align=center, minimum height=1.0cm, minimum width=2.4cm,
+            text width=2.4cm
+        },
+        arrow/.style={-{Stealth[length=2.5mm]}, thick}
+    ]
+    \node[block, fill=blue!10] (env) {Môi trường};
+    \node[block, fill=green!12, right=of env] (sensor) {Cảm biến\\LiDAR, Camera\\Encoder};
+    \node[block, fill=orange!12, right=of sensor] (process) {Xử lý\\SLAM, YOLO\\Localization};
+    \node[block, fill=yellow!15, right=of process] (control) {Điều khiển\\Nav2\\Mission Manager};
+    \node[block, fill=red!10, below=1.0cm of control] (actuator) {Cơ cấu chấp hành\\Truyền động vi sai};
 
-\subsubsection{LiDAR}
+    \draw[arrow] (env) -- (sensor);
+    \draw[arrow] (sensor) -- (process);
+    \draw[arrow] (process) -- (control);
+    \draw[arrow] (control) -- (actuator);
+    \draw[arrow] (actuator.west) -| (env.south);
+    \end{tikzpicture}
+    }
+    \caption{Sơ đồ vòng kín cảm biến -- xử lý -- điều khiển -- chấp hành}
+    \label{fig:closed-loop}
+\end{figure}
 
-LiDAR đo khoảng cách bằng cách phát tia laser và tính toán khoảng cách tới vật cản dựa trên thời gian bay hoặc nguyên lý tam giác lượng. Trong robot di động, LiDAR 2D thường tạo ra bản tin \texttt{LaserScan}, biểu diễn tập hợp khoảng cách theo các góc quét trong mặt phẳng ngang.
+Bảng 2.1 trình bày vai trò của các lớp chức năng trong hệ thống robot tự
+hành.
 
-Dữ liệu LiDAR có vai trò quan trọng trong SLAM, tránh vật cản và xây dựng costmap. Với TurtleBot4, topic \texttt{/scan} cung cấp thông tin khoảng cách xung quanh robot. Các tham số như tầm đo tối thiểu, tầm đo tối đa, độ phân giải góc và nhiễu đo ảnh hưởng trực tiếp đến chất lượng bản đồ và độ ổn định của navigation.
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.1322}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2670}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.3218}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2791}}|}
+\hline
+\textbf{Lớp hệ thống} & \textbf{Dữ liệu hoặc lệnh chính} & \textbf{Chức năng trong robot} & \textbf{Thành phần trong project} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Môi trường & Vật cản, mục tiêu, bản đồ, không gian di chuyển & Cung cấp
+điều kiện bên ngoài mà robot phải nhận biết và tương tác & Warehouse
+trong Gazebo/Ignition \\ \hline
+Cảm biến & \texttt{LaserScan}, ảnh RGB, ảnh depth, odometry, TF & Thu
+nhận thông tin môi trường và trạng thái robot & LiDAR, OAK-D,
+encoder/odometry \\ \hline
+Xử lý và ước lượng & Map, pose robot, detection, target pose & Biến dữ
+liệu thô thành thông tin có ý nghĩa & SLAM Toolbox, Object Localization,
+TF2 \\ \hline
+Điều khiển & Goal, path, velocity command & Lập kế hoạch và tạo lệnh
+chuyển động & Nav2, Patrol Node, Mission Manager \\ \hline
+Chấp hành & Vận tốc bánh trái/phải, chuyển động thân robot & Thực thi
+lệnh điều khiển thành chuyển động & Differential drive actuator \\ \hline
+\end{longtable}
 
-\subsubsection{Camera RGB-D}
+\subsection{LiDAR trong robot di động}\label{subsec:lidar}
 
-Camera RGB-D cung cấp đồng thời ảnh màu và ảnh chiều sâu. Ảnh RGB hỗ trợ nhận diện đối tượng bằng các mô hình học sâu như YOLOv8, còn ảnh depth cho phép ước lượng khoảng cách từ camera tới đối tượng. Với mô hình camera lỗ kim, một điểm ảnh \((u,v)\) có độ sâu \(Z\) được chuyển sang tọa độ 3D trong hệ camera theo công thức:
+\subsubsection{Định nghĩa và chức năng}
 
-\[
-X = \frac{(u-c_x)Z}{f_x}, \qquad
-Y = \frac{(v-c_y)Z}{f_y}, \qquad
-Z = Z
-\]
+LiDAR là cảm biến đo khoảng cách bằng ánh sáng laser. Tên gọi LiDAR
+thường được hiểu là Light Detection and Ranging. Cảm biến phát chùm tia
+laser ra môi trường, thu tín hiệu phản xạ từ vật cản và tính khoảng cách
+dựa trên thời gian bay của tia hoặc dựa trên nguyên lý đo pha, đo cường
+độ phản xạ hay tam giác lượng tùy loại cảm biến.
 
-Trong đó \(f_x, f_y\) là tiêu cự theo pixel, \(c_x, c_y\) là tọa độ tâm ảnh. Các tham số này được lấy từ bản tin \texttt{CameraInfo}. Trong đề tài, công thức này được dùng để định vị mục tiêu 3D từ bbox YOLO và ảnh depth.
+Trong robot di động, LiDAR 2D thường quét theo mặt phẳng ngang quanh
+robot và tạo ra một dãy khoảng cách tương ứng với các góc quét khác
+nhau. Dữ liệu này giúp robot nhận biết tường, vật cản, hành lang, khoảng
+trống và biên dạng môi trường. Trong project TurtleBot4, LiDAR phát dữ
+liệu qua topic \texttt{/scan} để SLAM Toolbox, Nav2 costmap và RViz sử
+dụng.
 
-\subsubsection{Odometry và encoder}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Latex, thick]
+\node[circle, draw, minimum size=1.5cm, fill=black!10] (robot) {LiDAR};
+\foreach \angle in {0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330} {
+    \draw[->, red!70, dashed] (robot.center) -- (\angle:2.5cm);
+}
+\draw[blue, very thick] (-10:2.8cm) arc (-10:130:2.8cm) node[midway, right] {Biên dạng vật cản};
+\draw[blue, very thick] (170:2.8cm) arc (170:280:2.8cm);
+\end{tikzpicture}
+\caption{Nguyên lý LiDAR 2D quét laser quanh robot và tạo tập điểm khoảng cách}
+\label{fig:lidar-principle}
+\end{figure}
 
-Odometry là ước lượng chuyển động tương đối của robot theo thời gian, thường dựa trên encoder bánh xe và mô hình động học. Với robot vi sai, vận tốc tuyến tính \(v\) và vận tốc góc \(\omega\) được liên hệ với vận tốc bánh trái \(v_l\), bánh phải \(v_r\) bởi:
+\subsubsection{Cấu tạo và chức năng từng thành phần}
 
-\[
-v = \frac{v_r + v_l}{2}, \qquad
-\omega = \frac{v_r - v_l}{L}
-\]
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.2730}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.7270}}|}
+\hline
+\textbf{Thành phần} & \textbf{Chức năng} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Bộ phát laser & Tạo chùm tia laser hẹp để chiếu ra môi trường theo từng
+hướng quét. \\ \hline
+Bộ thu quang & Thu tín hiệu laser phản xạ từ vật cản quay lại cảm
+biến. \\ \hline
+Cơ cấu quay hoặc gương quét & Thay đổi hướng tia laser để tạo vùng quét
+hai chiều quanh robot. \\ \hline
+Mạch đo thời gian/cường độ & Đo thời gian bay, độ lệch pha hoặc cường độ
+phản xạ để suy ra khoảng cách. \\ \hline
+Bộ xử lý tín hiệu & Lọc nhiễu, loại bỏ giá trị không hợp lệ và đóng gói
+dữ liệu thành mảng khoảng cách. \\ \hline
+Giao tiếp ROS2 & Chuyển dữ liệu đo thành bản tin
+\texttt{sensor\_msgs/LaserScan} trên topic \texttt{/scan}. \\ \hline
+\end{longtable}
 
-Trong đó \(L\) là khoảng cách giữa hai bánh chủ động. Odometry có ưu điểm là tần số cao và đáp ứng nhanh, nhưng sai số tích lũy theo thời gian do trượt bánh, sai số encoder và mô hình hóa chưa hoàn hảo. Vì vậy, odometry thường được kết hợp với LiDAR/camera trong SLAM hoặc localization.
+\subsubsection{Cách hoạt động và tính toán dữ liệu}
 
-\subsection{Hệ tọa độ và TF trong ROS2}
+Với nguyên lý thời gian bay, cảm biến phát tia laser đến vật cản và đo
+thời gian \(t\) để tia đi từ cảm biến đến vật cản rồi phản xạ quay lại.
+Vì tia laser đi cả chiều đi và chiều về, khoảng cách đến vật cản được
+tính bởi:
+\begin{gather*}d = \frac{c\, t}{2}\end{gather*}
+Trong đó, \(d\) là khoảng cách từ LiDAR đến vật cản, \(c\) là vận tốc
+ánh sáng và \(t\) là thời gian bay hai chiều của tia laser.
 
-Trong robot, dữ liệu từ nhiều cảm biến chỉ có ý nghĩa khi được quy về các hệ tọa độ nhất quán. ROS2 sử dụng TF/TF2 để quản lý quan hệ hình học giữa các frame như \texttt{map}, \texttt{odom}, \texttt{base\_link}, \texttt{oakd\_link}, \texttt{rplidar\_link}.
+LiDAR 2D không chỉ trả về một khoảng cách duy nhất mà trả về một mảng
+khoảng cách:
+\begin{gather*}r = \left\lbrack r_{0},r_{1},\ldots,r_{N - 1} \right\rbrack\end{gather*}
+Mỗi phần tử \(r_{i}\) ứng với một góc quét \(\theta_{i}\):
+\begin{gather*}\theta_{i} = \theta_{\min} + i\Delta\theta,\quad i = 0,1,\ldots,N - 1\end{gather*}
+Khi cần biểu diễn điểm đo trong hệ tọa độ của cảm biến, ta đổi từ tọa độ
+cực sang tọa độ Descartes:
+\begin{gather*}x_{i} = r_{i}\cos\theta_{i} \\[1.5ex]
+y_{i} = r_{i}\sin\theta_{i}\end{gather*}
+Như vậy, một bản tin \texttt{LaserScan} có thể được xem như tập hợp
+nhiều điểm \(\left( x_{i},y_{i} \right)\) mô tả biên dạng vật cản xung
+quanh robot.
 
-Quan hệ điển hình trong robot di động là:
+\subsubsection{Input, output và ứng dụng trong project}
 
-\[
-\texttt{map} \rightarrow \texttt{odom} \rightarrow \texttt{base\_link} \rightarrow \texttt{sensor\_frame}
-\]
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1712}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4515}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3773}}|}
+\hline
+\textbf{Loại dữ liệu} & \textbf{Nội dung} & \textbf{Ý nghĩa trong project} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Input vật lý & Tia laser phản xạ từ tường, kệ hàng, vật cản & Cung cấp
+thông tin khoảng cách thực tế xung quanh robot. \\ \hline
+Output ROS2 & Topic \texttt{/scan} kiểu \texttt{sensor\_msgs/LaserScan}
+& Dữ liệu chính cho SLAM, costmap và kiểm tra trong RViz. \\ \hline
+Tham số quan trọng & \texttt{range\_min}, \texttt{range\_max},
+\texttt{angle\_min}, \texttt{angle\_max}, \texttt{angle\_increment} &
+Quy định giới hạn đo, vùng quét và độ phân giải góc. \\ \hline
+Ứng dụng trong project & SLAM Toolbox, Nav2, RViz & Xây dựng bản đồ,
+tránh vật cản và đánh giá dữ liệu cảm biến. \\ \hline
+\end{longtable}
 
-Frame \texttt{map} là hệ toàn cục ổn định dùng cho navigation. Frame \texttt{odom} liên tục nhưng có thể trôi. Frame \texttt{base\_link} gắn với thân robot. Các frame cảm biến gắn với vị trí lắp đặt của LiDAR và camera. Việc biến đổi chính xác giữa các frame là điều kiện bắt buộc để robot có thể dùng dữ liệu cảm biến cho lập bản đồ, hiển thị RViz và điều hướng.
+Trong project TurtleBot4, LiDAR được dùng chủ yếu cho ba nhiệm vụ: xây
+dựng bản đồ bằng SLAM, định vị robot trên bản đồ và cập nhật costmap để
+Nav2 tránh vật cản. Nếu dữ liệu \texttt{/scan} sai, cố định hoặc mất
+frame, robot có thể tạo bản đồ sai, không tránh được vật cản hoặc không
+thể điều hướng ổn định.
 
-\subsection{SLAM}
+\subsection{Camera RGB-D OAK-D}\label{subsec:rgbd}
 
-SLAM, viết tắt của \textit{Simultaneous Localization and Mapping}, là bài toán robot vừa xây dựng bản đồ môi trường vừa ước lượng vị trí của chính nó trong bản đồ đó. Với LiDAR 2D, SLAM thường dựa trên scan matching giữa các lần quét liên tiếp, kết hợp với odometry để giảm không gian tìm kiếm.
+\subsubsection{Định nghĩa và chức năng}
 
-Trong đề tài, SLAM Toolbox được sử dụng với các thành phần chính: scan matching, quản lý pose graph, phát hiện loop closure và tối ưu hóa đồ thị. Kết quả của SLAM là occupancy grid map và transform \texttt{map -> odom}. Bản đồ này sau đó được dùng cho Nav2 để lập kế hoạch đường đi.
+Camera RGB-D là loại camera cung cấp đồng thời ảnh màu RGB và ảnh chiều
+sâu. Ảnh RGB chứa thông tin màu sắc và hình dạng của vật thể, phù hợp
+cho các thuật toán nhận diện đối tượng như YOLOv8. Ảnh depth cho biết
+khoảng cách từ camera đến các điểm trong ảnh, nhờ đó có thể ước lượng vị
+trí 3D của vật thể.
 
-\subsection{Nav2 và điều hướng robot}
+Trong project TurtleBot4, camera OAK-D được dùng để phát hiện mục tiêu
+bằng YOLOv8n và định vị mục tiêu bằng ảnh depth. Đây là cảm biến quan
+trọng giúp robot không chỉ biết có vật thể xuất hiện trong ảnh mà còn
+biết vật thể đó nằm cách robot bao xa.
 
-Nav2 là framework điều hướng trong ROS2, cung cấp các chức năng localization, global planning, local control, recovery behavior và action interface. Trong hệ thống này, Mission Manager và Patrol Node gửi goal đến Nav2 thông qua action \texttt{NavigateToPose}. Nav2 sau đó tính đường đi trên bản đồ, tạo lệnh vận tốc \texttt{/cmd\_vel} và điều khiển robot di chuyển tới mục tiêu.
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.5cm and 2cm, every node/.style={draw, rounded corners, align=center, fill=blue!5}, >=Latex]
+\node (cam) [minimum height=3.5cm] {Camera OAK-D};
+\node (rgb) [right=of cam, yshift=1.6cm] {Ảnh RGB\\\texttt{image\_raw}};
+\node (depth) [right=of cam, yshift=0cm] {Ảnh Depth\\\texttt{depth}};
+\node (info) [right=of cam, yshift=-1.6cm] {Thông số nội tại\\\texttt{camera\_info}};
+\draw[->] (cam.east) -- (rgb.west);
+\draw[->] (cam.east) -- (depth.west);
+\draw[->] (cam.east) -- (info.west);
+\end{tikzpicture}
+\caption{Camera RGB-D OAK-D gồm luồng ảnh RGB, ảnh depth và thông số nội tại camera}
+\label{fig:rgbd-flow}
+\end{figure}
 
-Về bản chất, Nav2 là lớp trung gian giữa thuật toán lập kế hoạch và cơ cấu chấp hành. Nó chuyển yêu cầu vị trí đích thành chuỗi lệnh vận tốc phù hợp với giới hạn động học và môi trường xung quanh robot.
+\subsubsection{Thành phần và chức năng}
 
-\subsection{YOLOv8 trong nhận diện đối tượng}
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.3601}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.6399}}|}
+\hline
+\textbf{Thành phần} & \textbf{Chức năng} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Camera RGB & Thu ảnh màu của môi trường để nhận diện đối tượng bằng
+YOLOv8. \\ \hline
+Cụm camera stereo hoặc cảm biến depth & Tạo ảnh chiều sâu, trong đó mỗi
+pixel chứa giá trị khoảng cách. \\ \hline
+Bộ xử lý ảnh & Đồng bộ dữ liệu RGB và depth, tiền xử lý ảnh và tạo luồng
+dữ liệu đầu ra. \\ \hline
+Thông số nội tại camera & Cung cấp các tham số \(f_{x}\), \(f_{y}\),
+\(c_{x}\), \(c_{y}\) phục vụ chuyển đổi 2D sang 3D. \\ \hline
+Giao tiếp ROS2 & Publish ảnh RGB, ảnh depth và \texttt{CameraInfo} cho
+các node xử lý. \\ \hline
+\end{longtable}
 
-YOLOv8 là mô hình phát hiện đối tượng một giai đoạn, có khả năng dự đoán bounding box, nhãn lớp và độ tin cậy trực tiếp từ ảnh đầu vào. Trong đề tài, YOLOv8n được lựa chọn vì kích thước nhỏ, tốc độ nhanh và phù hợp với bài toán mô phỏng thời gian thực.
+\subsubsection{Cách hoạt động và tính toán dữ liệu}
 
-Kết quả nhận diện được đóng gói dưới dạng \texttt{Detection2DArray}. Mỗi detection gồm tọa độ tâm bbox, kích thước bbox, class id và confidence. Khi kết hợp với ảnh depth, bbox 2D được nâng thành vị trí 3D tương đối so với camera.
+Ảnh RGB được đưa vào mô hình YOLOv8 để phát hiện bounding box của đối
+tượng. Giả sử bounding box có tâm tại điểm ảnh \((u,v)\) và ảnh depth
+cho biết độ sâu tại điểm đó là \(Z\). Dựa trên mô hình camera lỗ kim,
+tọa độ 3D của điểm trong hệ camera được tính như sau:
+\begin{gather*}X_{c} = \frac{\left( u - c_{x} \right)Z}{f_{x}} \\[1.5ex]
+Y_{c} = \frac{\left( v - c_{y} \right)Z}{f_{y}} \\[1.5ex]
+Z_{c} = Z\end{gather*}
+Trong đó, \(f_{x}\) và \(f_{y}\) là tiêu cự theo đơn vị pixel; \(c_{x}\)
+và \(c_{y}\) là tọa độ tâm ảnh; \(u\) và \(v\) là tọa độ pixel của tâm
+bounding box; \(Z\) là giá trị depth tại vùng chứa mục tiêu.
 
-\subsection{Cơ cấu chấp hành robot vi sai}
+Có thể viết dưới dạng ma trận nội tại camera:
+\begin{gather*}K = \begin{bmatrix}
+f_{x} & 0 & c_{x} \\
+0 & f_{y} & c_{y} \\
+0 & 0 & 1
+\end{bmatrix}\end{gather*}
+Quan hệ chiếu phối cảnh từ điểm 3D sang điểm ảnh là:
+\begin{gather*}s\begin{bmatrix}
+u \\
+v \\
+1
+\end{bmatrix} = K\begin{bmatrix}
+X_{c} \\
+Y_{c} \\
+Z_{c}
+\end{bmatrix}\end{gather*}
+Vì ảnh depth thường có nhiễu hoặc điểm mất dữ liệu, project không nên
+lấy một pixel đơn lẻ tại tâm bbox. Cách ổn định hơn là lấy trung vị
+trong một cửa sổ nhỏ quanh tâm bbox:
+\begin{gather*}Z = \operatorname{median}\left\{ D(u + i,v + j) \mid (i,j) \in \Omega \right\}\end{gather*}
+Trong đó, \(D\) là ảnh depth và \(\Omega\) là vùng lân cận quanh tâm
+bounding box.
 
-TurtleBot4 sử dụng cấu trúc truyền động vi sai gồm hai bánh chủ động độc lập. Cơ cấu này có ưu điểm đơn giản, dễ điều khiển, bán kính quay nhỏ và phù hợp với môi trường trong nhà. Lệnh điều khiển thường ở dạng vận tốc tuyến tính \(v\) và vận tốc góc \(\omega\). Bộ điều khiển cấp thấp chuyển đổi \((v,\omega)\) thành vận tốc góc từng bánh.
+\subsubsection{Input, output và ứng dụng trong project}
 
-Nếu bán kính bánh xe là \(r\), khoảng cách hai bánh là \(L\), vận tốc góc bánh trái/phải lần lượt là \(\omega_l, \omega_r\), ta có:
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1705}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3540}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4755}}|}
+\hline
+\textbf{Loại dữ liệu} & \textbf{Topic hoặc nội dung} & \textbf{Vai trò trong project} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Input ảnh RGB & \texttt{/oakd/rgb/}\allowbreak\texttt{preview/}\allowbreak\texttt{image\_raw} & Ảnh đầu vào cho
+node YOLOv8. \\ \hline
+Input ảnh depth & \texttt{/oakd/rgb/}\allowbreak\texttt{preview/}\allowbreak\texttt{depth} & Dùng để lấy khoảng
+cách từ camera đến mục tiêu. \\ \hline
+Input camera info & \texttt{/oakd/rgb/}\allowbreak\texttt{preview/}\allowbreak\texttt{camera\_info} & Cung cấp
+\(f_{x}\), \(f_{y}\), \(c_{x}\), \(c_{y}\) để tính tọa độ 3D. \\ \hline
+Output trung gian & Bounding box và class id từ YOLOv8 & Xác định vùng
+ảnh chứa mục tiêu. \\ \hline
+Output cuối & \texttt{/target\_}\allowbreak\texttt{object\_}\allowbreak\texttt{pose\_map} & Vị trí mục tiêu sau
+định vị, dùng cho Mission Manager. \\ \hline
+\end{longtable}
 
-\[
-\omega_r = \frac{v + \frac{L}{2}\omega}{r}, \qquad
-\omega_l = \frac{v - \frac{L}{2}\omega}{r}
-\]
+Trong project, camera RGB-D biến thông tin thị giác thành vị trí mục
+tiêu trong không gian. Nếu chỉ có ảnh RGB, robot chỉ biết mục tiêu nằm ở
+đâu trên ảnh; nếu chỉ có depth, robot không biết điểm nào là mục tiêu.
+Khi kết hợp RGB, YOLOv8 và depth, robot có thể chuyển thông tin ngữ
+nghĩa thành tọa độ 3D để điều hướng.
 
-Mô hình này là nền tảng để hiểu cách lệnh \texttt{/cmd\_vel} từ Nav2 được chuyển thành chuyển động vật lý của robot.
+\subsection{Odometry và encoder}\label{subsec:odometry}
 
-\subsection{Kết luận chương}
+\subsubsection{Định nghĩa và chức năng}
 
-Chương này đã trình bày các cơ sở lý thuyết quan trọng liên quan đến cảm biến, cơ cấu chấp hành và robot tự hành. Các nội dung gồm LiDAR, camera RGB-D, odometry, TF, SLAM, Nav2, YOLOv8 và mô hình truyền động vi sai. Đây là nền tảng để phân tích kiến trúc và quá trình triển khai hệ thống TurtleBot4 trong các chương tiếp theo.
+Odometry là phương pháp ước lượng chuyển động của robot theo thời gian
+dựa trên dữ liệu từ encoder bánh xe và mô hình động học. Encoder đo góc
+quay hoặc số xung quay của từng bánh xe. Từ đó, robot tính được quãng
+đường mỗi bánh đã đi, suy ra độ dịch chuyển và độ quay của thân robot.
+
+Odometry có ưu điểm là cập nhật nhanh, liên tục và không phụ thuộc trực
+tiếp vào môi trường bên ngoài. Tuy nhiên, odometry có sai số tích lũy
+theo thời gian do trượt bánh, sai số bán kính bánh xe, sai số khoảng
+cách giữa hai bánh và nhiễu encoder. Vì vậy, odometry thường được kết
+hợp với LiDAR và SLAM để tăng độ chính xác.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.5cm, every node/.style={draw, rounded corners, align=center, fill=green!5}, >=Latex]
+\node (enc) {Encoder trái/phải\\(Xung/Góc quay)};
+\node (odom) [right=of enc] {Mô hình động học\\(Kinematics)};
+\node (pose) [right=of odom] {Odometry\\($x, y, \theta, v, \omega$)};
+\draw[->] (enc) -- (odom);
+\draw[->] (odom) -- (pose);
+\end{tikzpicture}
+\caption{Encoder đo góc quay hai bánh và suy ra chuyển động của robot vi sai}
+\label{fig:encoder-odometry}
+\end{figure}
+
+\subsubsection{Thành phần và chức năng}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.2438}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.7562}}|}
+\hline
+\textbf{Thành phần} & \textbf{Chức năng} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Encoder bánh trái & Đo góc quay hoặc số xung của bánh trái. \\ \hline
+Encoder bánh phải & Đo góc quay hoặc số xung của bánh phải. \\ \hline
+Bánh xe và động cơ & Tạo chuyển động vật lý cho robot. \\ \hline
+Bộ điều khiển thấp & Đọc encoder, tính vận tốc bánh và xuất dữ liệu
+odometry. \\ \hline
+Topic \texttt{/odom} & Cung cấp pose tương đối và vận tốc của
+robot cho các node ROS2. \\ \hline
+\end{longtable}
+
+\subsubsection{Cách tính toán dữ liệu odometry}
+
+Gọi \(\Delta\phi_{r}\) và \(\Delta\phi_{l}\) lần lượt là độ thay đổi góc
+quay của bánh phải và bánh trái trong một chu kỳ lấy mẫu. Nếu bán kính
+bánh xe là \(r\), quãng đường mỗi bánh đi được là:
+\begin{gather*}\Delta s_{r} = r\Delta\phi_{r} \\[1.5ex]
+\Delta s_{l} = r\Delta\phi_{l}\end{gather*}
+Độ dịch chuyển trung bình của robot là:
+\begin{gather*}\Delta s = \frac{\Delta s_{r} + \Delta s_{l}}{2}\end{gather*}
+Độ thay đổi góc hướng của robot là:
+\begin{gather*}\Delta\theta = \frac{\Delta s_{r} - \Delta s_{l}}{L}\end{gather*}
+Trong đó, \(L\) là khoảng cách giữa hai bánh chủ động. Nếu trạng thái
+robot tại thời điểm \(k\) là \(\left( x_{k},y_{k},\theta_{k} \right)\),
+trạng thái tại thời điểm tiếp theo có thể xấp xỉ bởi:
+\begin{gather*}x_{k + 1} = x_{k} + \Delta s\cos\left( \theta_{k} + \frac{\Delta\theta}{2} \right) \\[1.5ex]
+y_{k + 1} = y_{k} + \Delta s\sin\left( \theta_{k} + \frac{\Delta\theta}{2} \right) \\[1.5ex]
+\theta_{k + 1} = \theta_{k} + \Delta\theta\end{gather*}
+\subsubsection{Input, output và ứng dụng trong project}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1522}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4716}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3762}}|}
+\hline
+\textbf{Loại dữ liệu} & \textbf{Nội dung} & \textbf{Vai trò trong project} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Input & Xung encoder hoặc vận tốc bánh xe & Cơ sở để tính quãng đường
+bánh trái/phải. \\ \hline
+Output & Topic \texttt{/odom} & Cung cấp pose tương đối và vận tốc
+robot. \\ \hline
+Dữ liệu sử dụng & \(x\), \(y\), \(\theta\), \(v\), \(\omega\) & Đưa vào
+SLAM, Nav2 và TF. \\ \hline
+Ứng dụng & Hỗ trợ scan matching, điều hướng và ước lượng trạng thái &
+Giúp robot có thông tin chuyển động liên tục. \\ \hline
+\end{longtable}
+
+Trong project TurtleBot4, odometry giúp robot biết chuyển động tương đối
+của mình giữa các lần đo LiDAR. Dữ liệu này đặc biệt quan trọng đối với
+SLAM vì nó giúp giới hạn vùng tìm kiếm khi so khớp các scan liên tiếp.
+
+\subsection{Hệ tọa độ và TF/TF2 trong ROS2}\label{subsec:tf2}
+
+\subsubsection{Định nghĩa và chức năng}
+
+Trong robot, các cảm biến thường được lắp tại các vị trí khác nhau.
+LiDAR, camera, thân robot và bản đồ không cùng một hệ tọa độ. TF/TF2 là
+cơ chế của ROS2 dùng để quản lý và biến đổi dữ liệu giữa các hệ tọa độ
+đó.
+
+Các frame thường gặp trong project gồm \texttt{map}, \texttt{odom},
+\texttt{base\_link}, \texttt{oakd\_link} và \texttt{rplidar\_link}.
+Frame \texttt{map} là hệ tọa độ toàn cục, ổn định và dùng cho
+navigation. Frame \texttt{odom} là hệ tọa độ cục bộ liên tục nhưng có
+thể trôi. Frame \texttt{base\_link} gắn với thân robot. Các frame cảm
+biến gắn với vị trí lắp đặt LiDAR và camera.
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{
+\begin{tikzpicture}[
+  node distance=1cm and 2cm,
+  box/.style={draw, rounded corners, fill=white, align=center},
+  >=Latex
+]
+\node[box] (map) {\texttt{map}};
+\node[box] (odom) [right=of map] {\texttt{odom}};
+\node[box] (base) [right=of odom] {\texttt{base\_link}};
+\node[box] (lidar) [above right=0.8cm and 3cm of base] {\texttt{rplidar\_link}};
+\node[box] (oakd) [below right=0.8cm and 3cm of base] {\texttt{oakd\_link}};
+
+\draw[->, thick] (map) -- node[above, font=\small\rmfamily] {SLAM} (odom);
+\draw[->, thick] (odom) -- node[above, font=\small\rmfamily] {Odometry} (base);
+
+\draw[thick] (base.east) -- +(0.8, 0) coordinate (fork);
+
+\draw[thick] (fork) -- (fork |- lidar.west);
+\draw[->, thick] (fork |- lidar.west) -- node[above, font=\small\rmfamily] {URDF (Tĩnh)} (lidar.west);
+
+\draw[thick] (fork) -- (fork |- oakd.west);
+\draw[->, thick] (fork |- oakd.west) -- (oakd.west);
+
+\end{tikzpicture}
+}
+\caption{Cây TF của hệ thống TurtleBot4}
+\label{fig:tf-tree}
+\end{figure}
+
+\subsubsection{Công thức biến đổi tọa độ}
+
+Một điểm \(p_{B}\) trong hệ tọa độ \(B\) có thể được chuyển sang hệ tọa
+độ \(A\) bằng công thức:
+\begin{gather*}p_{A} = R_{A}^{B}p_{B} + t_{A}^{B}\end{gather*}
+Trong đó, \(R_{A}^{B}\) là ma trận quay từ hệ \(B\) sang hệ \(A\), còn
+\(t_{A}^{B}\) là vector tịnh tiến giữa hai hệ tọa độ.
+
+Dưới dạng tọa độ thuần nhất, phép biến đổi được viết là:
+\begin{gather*}\begin{bmatrix}
+p_{A} \\
+1
+\end{bmatrix} = \begin{bmatrix}
+R_{A}^{B} & t_{A}^{B} \\
+0^{T} & 1
+\end{bmatrix}\begin{bmatrix}
+p_{B} \\
+1
+\end{bmatrix}\end{gather*}
+Nếu mục tiêu được phát hiện trong frame camera, TF cho phép chuyển pose
+mục tiêu từ \texttt{oakd\_link} sang \texttt{map}. Nhờ đó, Mission
+Manager có thể tạo goal trong hệ tọa độ bản đồ để gửi cho Nav2.
+
+\subsubsection{Input, output và ứng dụng trong project}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1493}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3593}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4914}}|}
+\hline
+\textbf{Loại dữ liệu} & \textbf{Nội dung} & \textbf{Vai trò trong project} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Input & Quan hệ hình học giữa các frame & Xác định vị trí tương đối giữa
+robot, cảm biến và bản đồ. \\ \hline
+Output & Transform giữa các frame & Cho phép chuyển đổi dữ liệu cảm biến
+sang frame cần dùng. \\ \hline
+Topic liên quan & \texttt{/tf}, \texttt{/tf\_static} & Cung cấp
+transform động và transform tĩnh. \\ \hline
+Ứng dụng & Chuyển pose mục tiêu từ camera sang map & Điều kiện bắt buộc
+để Mission Manager gửi goal chính xác. \\ \hline
+\end{longtable}
+
+\subsection{SLAM}\label{subsec:slam}
+
+\subsubsection{Định nghĩa và chức năng}
+
+SLAM là viết tắt của Simultaneous Localization and Mapping, nghĩa là
+đồng thời định vị và xây dựng bản đồ. Bài toán SLAM đặt ra khi robot
+chưa có bản đồ hoàn chỉnh của môi trường. Robot phải vừa ước lượng vị
+trí của chính nó, vừa cập nhật bản đồ dựa trên dữ liệu cảm biến.
+
+Trong project TurtleBot4, SLAM Toolbox sử dụng dữ liệu LiDAR
+\texttt{/scan}, odometry và TF để xây dựng bản đồ occupancy grid. Bản đồ
+này sau đó được dùng cho Nav2 để lập kế hoạch đường đi.
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{
+\begin{tikzpicture}[node distance=1.5cm, every node/.style={draw, rounded corners, fill=orange!5}, >=Latex]
+\node (scan) {LiDAR /scan};
+\node (odom) [below=0.5cm of scan] {Odometry /odom};
+\node (tf) [below=0.5cm of odom] {TF /tf};
+\node (slam) [right=1.5cm of odom, minimum height=3cm, fill=orange!20, align=center] {SLAM\\Toolbox};
+\node (map) [right=1.5cm of slam, yshift=0.8cm] {Bản đồ (map)};
+\node (pose) [right=1.5cm of slam, yshift=-0.8cm] {TF map $\rightarrow$ odom};
+\draw[->] (scan) -- (slam.160);
+\draw[->] (odom) -- (slam.180);
+\draw[->] (tf) -- (slam.200);
+\draw[->] (slam.20) -- (map);
+\draw[->] (slam.340) -- (pose);
+\end{tikzpicture}
+}
+\caption{SLAM sử dụng LiDAR, odometry và TF để tạo bản đồ và pose robot}
+\label{fig:slam-flow}
+\end{figure}
+
+\subsubsection{Nguyên lý tính toán trong SLAM}
+
+Một mô hình SLAM tổng quát có thể mô tả bằng hai phương trình: mô hình
+chuyển động và mô hình đo.
+
+Mô hình chuyển động:
+\begin{gather*}x_{t} = f\left( x_{t - 1},u_{t} \right) + w_{t}\end{gather*}
+Mô hình đo:
+\begin{gather*}z_{t} = h\left( x_{t},m \right) + v_{t}\end{gather*}
+Trong đó, \(x_{t}\) là trạng thái robot tại thời điểm \(t\), \(u_{t}\)
+là lệnh điều khiển hoặc odometry, \(z_{t}\) là dữ liệu đo từ cảm biến,
+\(m\) là bản đồ, \(w_{t}\) là nhiễu chuyển động và \(v_{t}\) là nhiễu
+đo.
+
+Với SLAM dựa trên đồ thị pose, robot tạo các nút pose và các ràng buộc
+giữa chúng. Bài toán tối ưu có thể biểu diễn dưới dạng:
+\begin{gather*}X^{*} = \arg\min_{X}\sum_{(i,j)\in\mathcal{C}}\left\| e_{ij}\left(x_i,x_j,z_{ij}\right) \right\|_{\Omega_{ij}}^{2}\end{gather*}
+Trong đó, \(\mathbf{X}^{*}\) là tập pose tối ưu, \(\mathcal{C}\) là tập
+các ràng buộc giữa các pose, \(\mathbf{e}_{ij}\) là sai số giữa đo thực
+tế và dự đoán, \(\mathbf{\Omega}_{ij}\) là ma trận trọng số thông tin.
+
+Bản đồ occupancy grid thường biểu diễn môi trường bằng các ô lưới. Mỗi ô
+có xác suất bị chiếm dụng. Cập nhật theo log-odds có dạng:
+\begin{gather*}L_{t}\left( m_{i} \right) = L_{t - 1}\left( m_{i} \right) + \log\frac{p\left( m_{i} \mid z_{t} \right)}{1 - p\left( m_{i} \mid z_{t} \right)} - L_{0}\end{gather*}
+Trong đó, \(L_{t}\left( m_{i} \right)\) là log-odds của ô \(m_{i}\) tại
+thời điểm \(t\), \(z_{t}\) là dữ liệu đo hiện tại và \(L_{0}\) là
+log-odds ban đầu.
+
+\subsubsection{Input, output và ứng dụng trong project}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1937}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4010}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4052}}|}
+\hline
+\textbf{Loại dữ liệu} & \textbf{Nội dung} & \textbf{Vai trò trong project} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Input & \texttt{/scan}, \texttt{/odom}, \texttt{/tf} & Dữ liệu phục vụ
+scan matching và tối ưu pose. \\ \hline
+Output & Occupancy grid map, transform
+\texttt{map -> odom} & Bản đồ và quan hệ frame cho
+navigation. \\ \hline
+Thuật toán liên quan & Scan matching, pose graph, loop closure & Giảm
+sai số tích lũy và cải thiện bản đồ. \\ \hline
+Ứng dụng & Tạo bản đồ warehouse & Là nền tảng để Nav2 lập kế hoạch đường
+đi. \\ \hline
+\end{longtable}
+
+\subsection{Nav2 và điều hướng robot}\label{subsec:nav2}
+
+\subsubsection{Định nghĩa và chức năng}
+
+Nav2 là framework điều hướng cho ROS2. Nav2 nhận mục tiêu vị trí, lập
+đường đi toàn cục, tạo lệnh điều khiển cục bộ, tránh vật cản và gửi lệnh
+vận tốc cho robot. Trong project TurtleBot4, Patrol Node và Mission
+Manager không điều khiển trực tiếp bánh xe mà gửi goal đến Nav2 qua
+action \texttt{NavigateToPose}.
+
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{
+\begin{tikzpicture}[node distance=1.0cm and 1.2cm, every node/.style={draw, rounded corners, align=center, fill=cyan!5}, >=Latex]
+\node (goal) {Goal\\(NavigateToPose)};
+\node (global) [right=of goal] {Global Planner\\(Đường đi toàn cục)};
+\node (local) [right=of global] {Local Controller\\(Tránh vật cản)};
+\node (cmd) [right=of local] {Lệnh vận tốc\\/cmd\_vel};
+\draw[->] (goal) -- (global);
+\draw[->] (global) -- (local);
+\draw[->] (local) -- (cmd);
+\end{tikzpicture}
+}
+\caption{Luồng điều hướng Nav2 từ goal đến global planner, local controller và /cmd\_vel}
+\label{fig:nav2-flow}
+\end{figure}
+
+\subsubsection{Cách hoạt động của Nav2}
+
+Nav2 thường gồm các khối chính: map server, localization, global
+planner, local controller, costmap, behavior tree và recovery behaviors.
+Khi nhận goal, Nav2 tìm một đường đi từ pose hiện tại đến goal. Một cách
+khái quát, bài toán lập đường đi có thể viết như sau:
+\begin{gather*}\mathcal{P}^{*} = \arg\min_{\mathcal{P}}\sum_{i = 0}^{n - 1}J\left( p_{i},p_{i + 1} \right)\end{gather*}
+Trong đó, \(\mathcal{P}^{*}\) là đường đi tối ưu,
+\(\mathcal{P} = \{p_{0},p_{1},\ldots,p_{n}\}\) là một đường đi ứng viên
+và \(J\) là hàm chi phí giữa hai điểm liên tiếp. Chi phí này thường phụ
+thuộc vào độ dài đường đi, khoảng cách đến vật cản và vùng chi phí trên
+costmap.
+
+Sau khi có đường đi toàn cục, local controller tạo lệnh vận tốc:
+\begin{gather*}u = \begin{bmatrix}
+v \\
+\omega
+\end{bmatrix}\end{gather*}
+Trong đó, \(v\) là vận tốc tuyến tính và \(\omega\) là vận tốc
+góc. Lệnh này được publish dưới dạng \texttt{geometry\_msgs/Twist} trên topic
+\texttt{/cmd\_vel}.
+
+\subsubsection{Input, output và ứng dụng trong project}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1309}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3296}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.5394}}|}
+\hline
+\textbf{Loại dữ liệu} & \textbf{Nội dung} & \textbf{Vai trò trong project} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Input & Map, robot pose, costmap, goal & Cơ sở để lập đường đi và tránh
+vật cản. \\ \hline
+Output & Topic \texttt{/cmd\_vel} & Lệnh vận tốc gửi đến cơ cấu chấp
+hành. \\ \hline
+Action & \texttt{NavigateToPose} & Giao tiếp goal từ Patrol Node hoặc
+Mission Manager đến Nav2. \\ \hline
+Ứng dụng & Tuần tra waypoint, tiếp cận mục tiêu & Điều khiển robot di
+chuyển an toàn trong môi trường. \\ \hline
+\end{longtable}
+
+\subsection{YOLOv8 trong nhận diện đối tượng}\label{subsec:yolov8}
+
+\subsubsection{Định nghĩa và chức năng}
+
+YOLO là họ mô hình phát hiện đối tượng một giai đoạn. YOLOv8 nhận ảnh
+đầu vào và dự đoán trực tiếp bounding box, nhãn lớp và độ tin cậy của
+đối tượng. Trong project TurtleBot4, YOLOv8n được dùng vì mô hình nhỏ,
+tốc độ nhanh và phù hợp với mô phỏng thời gian thực.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.5cm, every node/.style={draw, rounded corners, align=center, fill=yellow!10}, >=Latex]
+\node (img) {Ảnh RGB};
+\node (yolo) [right=of img] {Mô hình\\YOLOv8n};
+\node (det) [right=of yolo, align=left] {Bounding box\\Class ID\\Confidence};
+\draw[->] (img) -- (yolo);
+\draw[->] (yolo) -- (det);
+\end{tikzpicture}
+\caption{YOLOv8 nhận ảnh RGB và xuất bounding box, class id, confidence}
+\label{fig:yolo-flow}
+\end{figure}
+
+\subsubsection{Dữ liệu đầu ra của YOLOv8}
+
+Mỗi đối tượng được phát hiện có thể biểu diễn bởi:
+\begin{gather*}b = \left( x_{c},y_{c},w,h,c,s \right)\end{gather*}
+Trong đó, \(x_{c}\) và \(y_{c}\) là tọa độ tâm bounding box, \(w\) là
+chiều rộng bbox, \(h\) là chiều cao bbox, \(c\) là nhãn lớp và \(s\) là
+độ tin cậy.
+
+Độ tin cậy có thể hiểu khái quát là:
+\begin{gather*}s = P\left( \text{object} \right)\, P\left( c \mid \text{object} \right)\end{gather*}
+Khi có nhiều bounding box chồng lấn, thuật toán Non-Maximum Suppression
+sử dụng chỉ số IoU để loại bỏ bbox dư thừa:
+\begin{gather*}IoU(A,B) = \frac{|A \cap B|}{|A \cup B|}\end{gather*}
+BBox có độ tin cậy cao hơn được giữ lại, còn bbox có IoU lớn hơn ngưỡng
+và confidence thấp hơn sẽ bị loại bỏ.
+
+\subsubsection{Input, output và ứng dụng trong project}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1360}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4075}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4565}}|}
+\hline
+\textbf{Loại dữ liệu} & \textbf{Nội dung} & \textbf{Vai trò trong project} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Input & Ảnh RGB từ \texttt{/oakd/rgb/}\allowbreak\texttt{preview/}\allowbreak\texttt{image\_raw} & Dữ liệu đầu
+vào cho mô hình YOLOv8n. \\ \hline
+Output & \texttt{/vision/}\allowbreak\texttt{detected\_objects} & Chứa bounding box, class
+id và confidence. \\ \hline
+Tham số & Confidence threshold, model path & Quy định ngưỡng nhận diện
+và mô hình sử dụng. \\ \hline
+Ứng dụng & Phát hiện mục tiêu, ưu tiên lớp \texttt{person} & Cung cấp
+bbox cho Object Localization. \\ \hline
+\end{longtable}
+
+\subsection{Định vị mục tiêu từ RGB-D}\label{subsec:object-localization}
+
+\subsubsection{Vai trò của định vị mục tiêu}
+
+Nhận diện đối tượng chỉ cho biết mục tiêu nằm ở vùng nào trên ảnh. Để
+robot di chuyển đến gần mục tiêu, hệ thống cần chuyển vùng ảnh đó thành
+vị trí 3D trong không gian. Đây là nhiệm vụ của Object Localization.
+
+Object Localization kết hợp ba nguồn dữ liệu: bounding box từ YOLOv8,
+ảnh depth từ camera RGB-D và thông số nội tại camera. Kết quả cuối cùng
+là pose mục tiêu để Mission Manager tính điểm tiếp cận an toàn.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.5cm, every node/.style={draw, rounded corners, fill=purple!5}, >=Latex]
+\node (bbox) {Bounding Box};
+\node (depth) [below=0.5cm of bbox] {Ảnh Depth};
+\node (info) [below=0.5cm of depth] {CameraInfo};
+\node (loc) [right=1.5cm of depth, minimum height=3cm, fill=purple!20, align=center] {Object\\Localization};
+\node (pose) [right=1.5cm of loc] {Target Pose 3D};
+\draw[->] (bbox) -- (loc.160);
+\draw[->] (depth) -- (loc.180);
+\draw[->] (info) -- (loc.200);
+\draw[->] (loc) -- (pose);
+\end{tikzpicture}
+\caption{Quy trình bbox, depth và CameraInfo tạo target pose 3D}
+\label{fig:localization-flow}
+\end{figure}
+
+\subsubsection{Quy trình tính toán}
+
+Bước 1: Lấy tâm bounding box:
+\begin{gather*}u = \frac{x_{\min} + x_{\max}}{2} \\[1.5ex]
+v = \frac{y_{\min} + y_{\max}}{2}\end{gather*}
+Bước 2: Lấy độ sâu tại vùng lân cận tâm bbox:
+\begin{gather*}Z = \operatorname{median}\left( D_{\Omega} \right)\end{gather*}
+Bước 3: Chuyển điểm ảnh sang tọa độ 3D trong hệ camera:
+\begin{gather*}\begin{bmatrix}
+X_{c} \\
+Y_{c} \\
+Z_{c}
+\end{bmatrix} = \begin{bmatrix}
+\frac{\left( u - c_{x} \right)Z}{f_{x}} \\
+\frac{\left( v - c_{y} \right)Z}{f_{y}} \\
+Z
+\end{bmatrix}\end{gather*}
+Bước 4: Đổi từ quy ước trục camera sang quy ước trục ROS:
+\begin{gather*}x_{ros} = Z_{c} \\[1.5ex]
+y_{ros} = - X_{c} \\[1.5ex]
+z_{ros} = - Y_{c}\end{gather*}
+Bước 5: Dùng TF để chuyển pose mục tiêu sang frame \texttt{map} nếu cần:
+\begin{gather*}p_{map} = T_{map}^{camera}p_{camera}\end{gather*}
+\subsubsection{Input, output và ứng dụng trong project}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1263}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4138}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4599}}|}
+\hline
+\textbf{Loại dữ liệu} & \textbf{Nội dung} & \textbf{Vai trò trong project} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Input 1 & Detection từ YOLOv8 & Xác định vùng ảnh chứa mục tiêu. \\ \hline
+Input 2 & Ảnh depth & Lấy khoảng cách từ camera đến mục tiêu. \\ \hline
+Input 3 & CameraInfo & Cung cấp ma trận nội tại camera. \\ \hline
+Output & \texttt{/target\_}\allowbreak\texttt{object\_}\allowbreak\texttt{pose\_map},
+\texttt{/target\_object\_marker} & Pose mục tiêu và marker hiển thị
+trong RViz. \\ \hline
+Ứng dụng & Cung cấp vị trí mục tiêu cho Mission Manager & Giúp robot
+tiếp cận mục tiêu thay vì chỉ phát hiện trên ảnh. \\ \hline
+\end{longtable}
+
+\subsection{Cơ cấu chấp hành robot vi sai}\label{subsec:differential-drive}
+
+\subsubsection{Định nghĩa và chức năng}
+
+Robot vi sai là robot di động có hai bánh chủ động được điều khiển độc
+lập. Khi hai bánh quay cùng tốc độ, robot đi thẳng. Khi hai bánh quay
+khác tốc độ, robot quay. Khi hai bánh quay ngược chiều, robot có thể
+quay gần như tại chỗ. Cấu trúc này đơn giản, dễ điều khiển và phù hợp
+với robot trong nhà như TurtleBot4.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Latex, thick]
+\draw[fill=black!5] (0,0) circle (1.5cm);
+\draw[fill=black!50] (-0.4, 1.3) rectangle (0.4, 1.7) node[above=0.1cm, black] {Bánh trái ($v_l, \omega_l$)};
+\draw[fill=black!50] (-0.4, -1.7) rectangle (0.4, -1.3) node[below=0.1cm, black] {Bánh phải ($v_r, \omega_r$)};
+\draw[<->, red] (0, 1.3) -- (0, -1.3) node[midway, right] {$L$};
+\draw[->, blue, ultra thick] (0,0) -- (2.0,0) node[right] {$v$};
+\draw[->, blue, ultra thick] (0.8,0) arc (0:60:0.8cm) node[right] {$\omega$};
+\draw[->] (0, 1.5) -- (-1.2, 1.5) node[left] {$r$ (bán kính)};
+\end{tikzpicture}
+\caption{Mô hình robot vi sai với hai bánh chủ động, bán kính bánh $r$ và khoảng cách bánh $L$}
+\label{fig:differential-drive-model}
+\end{figure}
+
+\subsubsection{Mô hình động học}
+
+Giả sử robot chuyển động trên mặt phẳng và trạng thái robot là:
+\begin{gather*}x = \begin{bmatrix}
+x \\
+y \\
+\theta
+\end{bmatrix}\end{gather*}
+Phương trình động học của robot vi sai là:
+\begin{gather*}\dot{x} = v\cos\theta \\[1.5ex]
+\dot{y} = v\sin\theta \\[1.5ex]
+\dot{\theta} = \omega\end{gather*}
+Trong đó, \(v\) là vận tốc tuyến tính của robot và \(\omega\) là vận tốc
+góc quanh trục thẳng đứng.
+
+Quan hệ giữa vận tốc robot và vận tốc góc hai bánh là:
+\begin{gather*}v = \frac{r}{2}\left( \omega_{r} + \omega_{l} \right) \\[1.5ex]
+\omega = \frac{r}{L}\left( \omega_{r} - \omega_{l} \right)\end{gather*}
+Trong đó, \(\omega_{r}\) là vận tốc góc bánh phải, \(\omega_{l}\) là vận
+tốc góc bánh trái, \(r\) là bán kính bánh xe và \(L\) là khoảng cách
+giữa hai bánh chủ động.
+
+Từ hai công thức trên, vận tốc từng bánh được tính theo lệnh \(v\) và
+\(\omega\):
+\begin{gather*}\omega_{r} = \frac{v + \frac{L}{2}\omega}{r} \\[1.5ex]
+\omega_{l} = \frac{v - \frac{L}{2}\omega}{r}\end{gather*}
+\subsubsection{Ý nghĩa các trường hợp chuyển động}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.2969}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3024}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4007}}|}
+\hline
+\textbf{Điều kiện vận tốc bánh} & \textbf{Chuyển động của robot} & \textbf{Ý nghĩa điều khiển} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+\(\omega_{r} = \omega_{l}\) & Đi thẳng & Hai bánh tạo cùng vận tốc
+tiến. \\ \hline
+\(\omega_{r} > \omega_{l}\) & Quay về phía trái & Bánh phải đi nhanh hơn
+bánh trái. \\ \hline
+\(\omega_{r} < \omega_{l}\) & Quay về phía phải & Bánh trái đi nhanh hơn
+bánh phải. \\ \hline
+\(\omega_{r} = - \omega_{l}\) & Quay tại chỗ & Hai bánh quay ngược chiều
+nhau. \\ \hline
+\(\omega_{r} = \omega_{l} = 0\) & Đứng yên & Robot không di chuyển. \\ \hline
+\end{longtable}
+
+Trong project TurtleBot4, Nav2 không trực tiếp điều khiển từng bánh xe
+mà phát lệnh \texttt{/cmd\_vel} gồm \(v\) và \(\omega\). Bộ điều khiển
+cấp thấp sẽ chuyển lệnh này thành vận tốc bánh trái và bánh phải theo mô
+hình động học vi sai.
+
+\subsection{Mission Manager và thuật toán tiếp cận an toàn}\label{subsec:mission-manager}
+
+\subsubsection{Chức năng của Mission Manager}
+
+Mission Manager là lớp điều phối hành vi của robot. Khi robot đang tuần
+tra, Mission Manager theo dõi pose mục tiêu được publish từ Object
+Localization. Nếu mục tiêu hợp lệ và khoảng cách đến mục tiêu lớn hơn
+khoảng cách an toàn, Mission Manager tạm dừng Patrol Node, tính một goal
+an toàn và gửi goal đó đến Nav2.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=4cm, every node/.style={draw, rounded corners, circle, minimum size=2.5cm, align=center, fill=teal!10}, >=Latex]
+\node (patrol) {Patrol\\(Tuần tra)};
+\node (approach) [right=of patrol] {Approach\\(Tiếp cận)};
+\draw[->, thick, bend left=20] (patrol) to node[above, draw=none, fill=none] {Phát hiện mục tiêu} (approach);
+\draw[->, thick, bend left=20] (approach) to node[below, draw=none, fill=none] {Tiếp cận xong / Mất dấu} (patrol);
+\end{tikzpicture}
+\caption{Mission Manager chuyển từ trạng thái tuần tra sang tiếp cận mục tiêu rồi quay lại tuần tra}
+\label{fig:mission-manager-state}
+\end{figure}
+
+\subsubsection{Công thức tính safe goal}
+
+Gọi vị trí robot trong frame \texttt{map} là:
+\begin{gather*}p_{r} = \begin{bmatrix}
+x_{r} \\
+y_{r}
+\end{bmatrix}\end{gather*}
+Vị trí mục tiêu là:
+\begin{gather*}p_{t} = \begin{bmatrix}
+x_{t} \\
+y_{t}
+\end{bmatrix}\end{gather*}
+Vector từ robot đến mục tiêu là:
+\begin{gather*}\Delta p = p_{t} - p_{r} = \begin{bmatrix}
+x_{t} - x_{r} \\
+y_{t} - y_{r}
+\end{bmatrix} = \begin{bmatrix}
+d_{x} \\
+d_{y}
+\end{bmatrix}\end{gather*}
+Khoảng cách phẳng giữa robot và mục tiêu là:
+\begin{gather*}d = \sqrt{d_{x}^{2} + d_{y}^{2}}\end{gather*}
+Gọi \(d_{s}\) là khoảng cách an toàn cần giữ lại giữa robot và mục tiêu.
+Hệ số tiến đến mục tiêu được tính bởi:
+\begin{gather*}\alpha = \frac{d - d_{s}}{d},\quad d > d_{s}\end{gather*}
+Khi đó, goal an toàn là:
+\begin{gather*}p_{g} = p_{r} + \alpha\Delta p\end{gather*}
+Viết theo từng thành phần:
+\begin{gather*}x_{g} = x_{r} + \alpha d_{x} \\[1.5ex]
+y_{g} = y_{r} + \alpha d_{y}\end{gather*}
+Góc hướng để robot quay mặt về phía mục tiêu có thể tính bởi:
+\begin{gather*}\theta_{g} = \operatorname{atan2}\left( d_{y},d_{x} \right)\end{gather*}
+Công thức này giúp robot không đi đến đúng vị trí mục tiêu mà dừng trước
+mục tiêu một khoảng \(d_{s}\), giảm nguy cơ va chạm hoặc đứng quá sát
+đối tượng.
+
+\subsubsection{Input, output và ứng dụng trong project}
+
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1269}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3958}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4773}}|}
+\hline
+\textbf{Loại dữ liệu} & \textbf{Nội dung} & \textbf{Vai trò trong project} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+Input & Target pose, robot pose, TF & Xác định vị trí tương đối giữa
+robot và mục tiêu. \\ \hline
+Tham số & \texttt{safe\_distance}, \texttt{cooldown\_time} & Quy định
+khoảng cách dừng và thời gian tránh lặp phản ứng. \\ \hline
+Output & Goal an toàn gửi đến Nav2 & Điều khiển robot tiếp cận mục
+tiêu. \\ \hline
+Ứng dụng & Tuần tra - phát hiện - tiếp cận - quay lại tuần tra & Tạo
+hành vi tự hành ở mức nhiệm vụ. \\ \hline
+\end{longtable}
+
+\subsection{Luồng dữ liệu tổng hợp trong project TurtleBot4}\label{subsec:dataflow}
+
+Toàn bộ hệ thống có thể được mô tả bằng chuỗi dữ liệu từ cảm biến đến
+điều khiển như sau:
+\begin{align*}
+\text{RGB Image} &\rightarrow \text{YOLOv8} \rightarrow \text{2D Detection}, \\
+\text{2D Detection} + \text{Depth} + \text{CameraInfo}
+    &\rightarrow \text{3D Target Pose}, \\
+\text{Target Pose} + \text{TF} + \text{Robot Pose}
+    &\rightarrow \text{Safe Goal}, \\
+\text{Safe Goal} + \text{Map} + \text{Costmap}
+    &\rightarrow \text{Nav2 Path} \rightarrow \texttt{/cmd\_vel}, \\
+\texttt{/cmd\_vel} &\rightarrow \text{Differential Drive} \rightarrow \text{Wheel Motion}.
+\end{align*}
+\begin{figure}[H]
+\centering
+\resizebox{\textwidth}{!}{
+\begin{tikzpicture}[node distance=1.2cm and 1.8cm, every node/.style={draw, rounded corners, align=center, fill=gray!10}, >=Latex]
+\node (cam) {Camera};
+\node (yolo) [right=of cam] {YOLOv8};
+\node (loc) [right=of yolo] {Object\\Localization};
+\node (mission) [right=of loc] {Mission\\Manager};
+\node (nav) [right=of mission] {Nav2};
+\node (act) [right=of nav] {Differential\\Drive};
+
+\node (lidar) [below=2.0cm of yolo] {LiDAR};
+\node (slam) [right=of lidar] {SLAM};
+
+\draw[->, thick] (cam) -- node[above, draw=none, fill=none, font=\footnotesize] {RGB} (yolo);
+\draw[->, thick] (yolo) -- node[above, draw=none, fill=none, font=\footnotesize] {BBox} (loc);
+\draw[thick] (cam.south) -- +(0,-0.8) coordinate (tmp);
+\draw[->, thick] (tmp) -| node[pos=0.3, above, draw=none, fill=none, font=\footnotesize] {Depth} (loc.south);
+\draw[->, thick] (loc) -- node[above, draw=none, fill=none, font=\footnotesize] {Pose 3D} (mission);
+\draw[->, thick] (mission) -- node[above, draw=none, fill=none, font=\footnotesize] {Goal} (nav);
+\draw[->, thick] (nav) -- node[above, draw=none, fill=none, font=\footnotesize] {/cmd\_vel} (act);
+
+\draw[->, thick] (lidar) -- node[above, draw=none, fill=none, font=\footnotesize] {/scan} (slam);
+\draw[->, thick] (slam) -| node[near end, right, draw=none, fill=none, font=\footnotesize] {Map, TF} (nav.south);
+\end{tikzpicture}
+}
+\caption{Luồng dữ liệu tổng hợp từ camera, LiDAR, SLAM, YOLOv8, Mission Manager đến Nav2 và cơ cấu chấp hành}
+\label{fig:overall-dataflow}
+\end{figure}
+
+Bảng 2.12 tóm tắt input/output của các module chính trong project.
+
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.1687}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2385}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2759}}|
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.3169}}|}
+\hline
+\textbf{Module} & \textbf{Input} & \textbf{Output} & \textbf{Vai trò chính} \\ \hline
+\hline
+\endhead
+\hline
+\endlastfoot
+LiDAR & Môi trường vật lý & \texttt{/scan} & Đo khoảng cách phục vụ SLAM
+và tránh vật cản. \\ \hline
+OAK-D RGB-D & Ảnh RGB, ảnh depth & Image, depth, CameraInfo & Cung cấp
+dữ liệu cho nhận diện và định vị mục tiêu. \\ \hline
+YOLOv8 & Ảnh RGB & \texttt{/vision/}\allowbreak\texttt{detected\_objects} & Phát hiện đối
+tượng và tạo bounding box. \\ \hline
+Object Localization & Detection, depth, CameraInfo, TF &
+\texttt{/target\_}\allowbreak\texttt{object\_}\allowbreak\texttt{pose\_map} & Tính vị trí 3D của mục tiêu. \\ \hline
+SLAM Toolbox & \texttt{/scan}, \texttt{/odom}, TF & Map, transform
+\texttt{map -> odom} & Xây dựng bản đồ và hỗ trợ định
+vị. \\ \hline
+Nav2 & Map, pose, goal, costmap & \texttt{/cmd\_vel} & Lập đường đi và
+tạo lệnh vận tốc. \\ \hline
+Mission Manager & Target pose, robot pose & Safe goal, patrol
+enable/disable & Điều phối hành vi tuần tra và tiếp cận. \\ \hline
+Differential Drive & \(v\), \(\omega\) & Vận tốc hai bánh & Biến lệnh
+điều khiển thành chuyển động. \\ \hline
+\end{longtable}
+
+\subsection{Kết luận chương}\label{subsec:theory-conclusion}
+
+Chương này đã trình bày các cơ sở lý thuyết quan trọng phục vụ xây dựng
+hệ thống robot tự hành TurtleBot4. Các nội dung bao gồm vòng kín cảm
+biến - xử lý - điều khiển - chấp hành, LiDAR, camera RGB-D,
+odometry/encoder, TF/TF2, SLAM, Nav2, YOLOv8, định vị mục tiêu RGB-D, cơ
+cấu truyền động vi sai và thuật toán tiếp cận mục tiêu an toàn.
+
+Các công thức được trình bày trong chương cho thấy mối liên hệ giữa dữ
+liệu cảm biến và quyết định điều khiển. LiDAR biến thời gian bay của tia
+laser thành khoảng cách; camera RGB-D biến điểm ảnh và depth thành tọa
+độ 3D; encoder biến góc quay bánh xe thành odometry; TF biến đổi dữ liệu
+giữa các hệ tọa độ; Nav2 biến goal thành lệnh vận tốc; cơ cấu vi sai
+biến lệnh vận tốc thành chuyển động bánh xe. Đây là nền tảng để triển
+khai các chương tiếp theo về kiến trúc hệ thống, cảm biến, điều khiển
+chuyển động và nhiệm vụ tự hành.
